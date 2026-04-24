@@ -218,6 +218,8 @@ var players = [];
 var rounds  = [];
 var sesName = '';
 var sesId   = null;
+var sesStartTime = null;
+var sesEndTime = null;
 
 // ============================================================
 //  TABS
@@ -593,40 +595,97 @@ function generate() {
     return schedule;
   }
 
-  var waiterSchedule = buildWaiterSchedule(players, nW, nR);
+  // Build all unique slots: (waiter_combo, pairing)
+  // Then pick them in order that maximises fairness + variety
+  var allSlots = [];
+  if(nW <= 0) {
+    // 4 players: no waiting, just 3 pairings in cycle
+    var basePairs = allPairs(players);
+    for(var bp = 0; bp < basePairs.length; bp++) {
+      allSlots.push({ waiters:[], t1:basePairs[bp].t1, t2:basePairs[bp].t2, bal:0 });
+    }
+  } else {
+    var waiterCombosAll = combos(players, nW);
+    for(var wca = 0; wca < waiterCombosAll.length; wca++) {
+      var wcArr = waiterCombosAll[wca];
+      var wcSet = {};
+      for(var wcx = 0; wcx < wcArr.length; wcx++) wcSet[wcArr[wcx].name]=true;
+      var wcActive = players.filter(function(p){ return !wcSet[p.name]; });
+      var wcPairs = allPairs(wcActive);
+      for(var wcp = 0; wcp < wcPairs.length; wcp++) {
+        var t1=wcPairs[wcp].t1, t2=wcPairs[wcp].t2;
+        var bal = -Math.abs((t1[0].level+t1[1].level)-(t2[0].level+t2[1].level));
+        allSlots.push({ waiters:wcArr, t1:t1, t2:t2, bal:bal });
+      }
+    }
+  }
+
+  // Track usage
+  var playerWaitCount = {};
+  for(var pw = 0; pw < players.length; pw++) playerWaitCount[players[pw].name] = 0;
+  var slotUseCount = [];
+  for(var su = 0; su < allSlots.length; su++) slotUseCount.push(0);
+  var lastWaitersSet = {};
+  var recentPairKeys = [];
 
   for(var r = 0; r < nR; r++) {
+    var bestScore = null, bestSlot = null, bestSIdx = -1;
     var isMixed = (nC===2) && (r % 8 === 7);
-    var bestWaiters, bestCourts;
 
-    if(nW <= 0) {
-      bestWaiters = [];
-      bestCourts = bestAssign(players.slice(), nC, pairHist, recentPairsHistory, isMixed);
-    } else {
-      bestWaiters = waiterSchedule[r];
-      var wn6 = {};
-      for(var wx6 = 0; wx6 < bestWaiters.length; wx6++) wn6[bestWaiters[wx6].name]=true;
-      var activeP = players.filter(function(p){ return !wn6[p.name]; });
-      bestCourts = bestAssign(activeP, nC, pairHist, recentPairsHistory, isMixed);
+    for(var si3 = 0; si3 < allSlots.length; si3++) {
+      var slot = allSlots[si3];
 
-      // Fallback if no valid assignment
-      if(!bestCourts) {
-        bestWaiters = [];
-        bestCourts = bestAssign(players.slice(), nC, pairHist, recentPairsHistory, isMixed);
+      // Hard: no waiter overlap with last round
+      var conflict = false;
+      for(var cx = 0; cx < slot.waiters.length; cx++) {
+        if(lastWaitersSet[slot.waiters[cx].name]) { conflict=true; break; }
+      }
+      if(conflict) continue;
+
+      // Fairness: sum of wait counts of these waiters (prefer lower = they waited less)
+      var waitSum = 0;
+      for(var wx7 = 0; wx7 < slot.waiters.length; wx7++) waitSum += playerWaitCount[slot.waiters[wx7].name]||0;
+
+      // Pair variety: penalise recently seen pairing
+      var pk7 = pkey(slot.t1[0],slot.t1[1]) + '|' + pkey(slot.t2[0],slot.t2[1]);
+      var recentIdx = recentPairKeys.indexOf(pk7);
+      var recency = recentIdx >= 0 ? (recentPairKeys.length - recentIdx) : 0;
+
+      // Slot overuse penalty
+      var overuse = slotUseCount[si3];
+
+      // Score: prefer low wait sum, low recency, low overuse, best balance
+      var score = (-waitSum * 100) + (-recency * 60) + (-overuse * 40) + slot.bal;
+
+      if(bestScore === null || score > bestScore) {
+        bestScore = score; bestSlot = slot; bestSIdx = si3;
       }
     }
 
-    rounds.push({ courts:bestCourts, waiting:bestWaiters, score:{}, status:'pending' });
-
-    var thisRoundPairs = {};
-    for(var ci2=0; ci2<bestCourts.length; ci2++) {
-      var ct = bestCourts[ci2];
-      addPC(pairHist, ct.t1); addPC(pairHist, ct.t2);
-      thisRoundPairs[pkey(ct.t1[0],ct.t1[1])] = true;
-      thisRoundPairs[pkey(ct.t2[0],ct.t2[1])] = true;
+    // Fallback
+    if(!bestSlot) {
+      for(var fb = 0; fb < allSlots.length; fb++) {
+        var conflict2 = false;
+        for(var cx2 = 0; cx2 < allSlots[fb].waiters.length; cx2++) {
+          if(lastWaitersSet[allSlots[fb].waiters[cx2].name]) { conflict2=true; break; }
+        }
+        if(!conflict2) { bestSlot=allSlots[fb]; bestSIdx=fb; break; }
+      }
     }
-    recentPairsHistory.unshift(thisRoundPairs);
-    if(recentPairsHistory.length > 8) recentPairsHistory.pop();
+    if(!bestSlot) { bestSlot=allSlots[r%allSlots.length]; bestSIdx=r%allSlots.length; }
+
+    rounds.push({ courts:[{t1:bestSlot.t1,t2:bestSlot.t2,type:'main'}], waiting:bestSlot.waiters, score:{}, status:'pending' });
+    slotUseCount[bestSIdx]++;
+
+    var pk8 = pkey(bestSlot.t1[0],bestSlot.t1[1])+'|'+pkey(bestSlot.t2[0],bestSlot.t2[1]);
+    recentPairKeys.unshift(pk8);
+    if(recentPairKeys.length > 8) recentPairKeys.pop();
+
+    lastWaitersSet = {};
+    for(var lw2 = 0; lw2 < bestSlot.waiters.length; lw2++) {
+      playerWaitCount[bestSlot.waiters[lw2].name] = (playerWaitCount[bestSlot.waiters[lw2].name]||0)+1;
+      lastWaitersSet[bestSlot.waiters[lw2].name] = true;
+    }
   }
 
   renderRounds();
@@ -680,22 +739,28 @@ function cHtml(r, ri, ci) {
   h += '</div><div class="vs">VS</div><div class="team">';
   for(var j=0; j<c.t2.length; j++) h += '<div class="tp">'+sbdg(c.t2[j].level)+c.t2[j].name+'</div>';
   h += '</div></div>';
+  var s0d=(r.score&&r.score[ci])?r.score[ci][0]:'';
+  var s1d=(r.score&&r.score[ci])?r.score[ci][1]:'';
+  var n1d=c.t1.map(function(p){return p.name;}).join('/');
+  var n2d=c.t2.map(function(p){return p.name;}).join('/');
   if(r.status==='done') {
-    var sc = r.score && r.score[ci];
-    if(sc) {
-      var win = sc[0]>sc[1] ? c.t1.map(function(p){return p.name;}).join(' & ') : c.t2.map(function(p){return p.name;}).join(' & ');
-      h += '<div class="sd">'+sc[0]+' : '+sc[1]+'</div><div class="sw">🏆 '+win+'</div>';
+    var sc2d = r.score && r.score[ci];
+    if(sc2d) {
+      var win2 = sc2d[0]>sc2d[1] ? c.t1.map(function(p){return p.name;}).join(' & ') : c.t2.map(function(p){return p.name;}).join(' & ');
+      h += '<div class="sd">'+sc2d[0]+' : '+sc2d[1]+'</div><div class="sw">🏆 '+win2+'</div>';
     }
-  } else if(r.status==='playing') {
-    var s0=(r.score&&r.score[ci])?r.score[ci][0]:'';
-    var s1=(r.score&&r.score[ci])?r.score[ci][1]:'';
-    var n1=c.t1.map(function(p){return p.name;}).join('/');
-    var n2=c.t2.map(function(p){return p.name;}).join('/');
-    h += '<div class="sr">';
-    h += '<input class="si" type="number" min="0" max="11" placeholder="0" value="'+s0+'" id="sc'+ri+'x'+ci+'a">';
+    h += '<div class="sr" style="margin-top:6px">';
+    h += '<input class="si" type="number" min="0" max="99" placeholder="0" value="'+s0d+'" id="sc'+ri+'x'+ci+'a" style="opacity:.6">';
     h += '<span class="sc2">:</span>';
-    h += '<input class="si" type="number" min="0" max="11" placeholder="0" value="'+s1+'" id="sc'+ri+'x'+ci+'b">';
-    h += '<span style="font-size:.7rem;color:var(--tx2)">'+n1+'<br>vs<br>'+n2+'</span>';
+    h += '<input class="si" type="number" min="0" max="99" placeholder="0" value="'+s1d+'" id="sc'+ri+'x'+ci+'b" style="opacity:.6">';
+    h += '<button class="btn bgh bsm" data-a="fixscore" data-ri="'+ri+'" data-ci="'+ci+'" style="font-size:.7rem">✏️ Исправить</button>';
+    h += '</div>';
+  } else if(r.status==='playing') {
+    h += '<div class="sr">';
+    h += '<input class="si" type="number" min="0" max="99" placeholder="0" value="'+s0d+'" id="sc'+ri+'x'+ci+'a">';
+    h += '<span class="sc2">:</span>';
+    h += '<input class="si" type="number" min="0" max="99" placeholder="0" value="'+s1d+'" id="sc'+ri+'x'+ci+'b">';
+    h += '<span style="font-size:.7rem;color:var(--tx2)">'+n1d+'<br>vs<br>'+n2d+'</span>';
     h += '</div>';
   }
   h += '</div>';
@@ -725,6 +790,7 @@ function bindRounds() {
         else if(a==='fin')  finR(idx);
         else if(a==='shuf') reshuf(idx);
         else if(a==='edit') openEdit(idx);
+        else if(a==='fixscore') { var rif=parseInt(btn.getAttribute('data-ri')); var cif=parseInt(btn.getAttribute('data-ci')); saveScore(rif,cif); renderRounds(); }
       });
     })(btns[i]);
   }
@@ -738,8 +804,19 @@ function saveScore(ri,ci) {
   rounds[ri].score[ci]=[parseInt(ea.value)||0, parseInt(eb.value)||0];
   autoSave();
 }
-function startR(i) { rounds[i].status='playing'; renderRounds(); autoSave(); }
+function startR(i) {
+  rounds[i].status='playing';
+  if(i===0 && !sesStartTime) {
+    sesStartTime = new Date().toISOString();
+  }
+  renderRounds();
+  autoSave();
+}
 function finR(i) {
+  // Track end time when last round finishes
+  if(i === rounds.length - 1) {
+    sesEndTime = new Date().toISOString();
+  }
   for(var ci=0; ci<rounds[i].courts.length; ci++) {
     var ea=document.getElementById('sc'+i+'x'+ci+'a');
     var eb=document.getElementById('sc'+i+'x'+ci+'b');
@@ -923,6 +1000,7 @@ function saveSession() {
   var idx=-1;for(var i=0;i<sessions.length;i++){if(sessions[i].id===sesId){idx=i;break;}}
   var sess={
     id:sesId||Date.now(), name:sesName||'Сессия', date:new Date().toISOString(),
+    startTime: sesStartTime, endTime: sesEndTime,
     players:players.map(function(p){return{name:p.name,level:p.level};}),
     rounds:rounds.map(function(r){return{
       status:r.status,score:r.score,
@@ -937,22 +1015,87 @@ function saveSession() {
   alert('Сессия сохранена!');
 }
 
+function fmtTime(iso) {
+  if(!iso) return '';
+  var d = new Date(iso);
+  return d.getHours()+':'+(d.getMinutes()<10?'0':'')+d.getMinutes();
+}
+function fmtDate(iso) {
+  if(!iso) return '';
+  var mn=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  var d = new Date(iso);
+  return d.getDate()+' '+mn[d.getMonth()]+' '+d.getFullYear();
+}
+
 function renderHistory() {
   var sessions=JSON.parse(localStorage.getItem('pb_sess')||'[]');
   var el=document.getElementById('hlist');
   if(!sessions.length){el.innerHTML='<div class="empty">Нет сохранённых сессий</div>';return;}
-  var mn=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
   var h='';
   for(var i=0;i<sessions.length;i++){
-    var s=sessions[i],d=new Date(s.date);
-    var ds=d.getDate()+' '+mn[d.getMonth()]+' '+d.getFullYear();
-    var done=0;for(var j=0;j<s.rounds.length;j++){if(s.rounds[j].status==='done')done++;}
-    h+='<div class="si2" data-sid="'+s.id+'"><div class="sd2">'+ds+'</div><div class="sn">'+s.name+' · '+s.players.length+' игр. · '+done+'/'+s.rounds.length+'</div></div>';
+    var s=sessions[i];
+    var done=0,totalScore0=0,totalScore1=0;
+    for(var j=0;j<s.rounds.length;j++){
+      if(s.rounds[j].status==='done'){
+        done++;
+        var sc=s.rounds[j].score;
+        if(sc){
+          for(var k in sc){
+            if(sc[k]){totalScore0+=sc[k][0];totalScore1+=sc[k][1];}
+          }
+        }
+      }
+    }
+    var timeStr = '';
+    if(s.startTime) timeStr += '▶ '+fmtTime(s.startTime);
+    if(s.endTime) timeStr += '  ⏹ '+fmtTime(s.endTime);
+    var dur = '';
+    if(s.startTime && s.endTime) {
+      var mins = Math.round((new Date(s.endTime)-new Date(s.startTime))/60000);
+      if(mins>0) dur = ' ('+Math.floor(mins/60)+'ч '+mins%60+'м)';
+    }
+
+    // Build player list with stats for this session
+    var playerStats = {};
+    for(var pi=0;pi<s.players.length;pi++) playerStats[s.players[pi].name]={w:0,g:0};
+    for(var ri=0;ri<s.rounds.length;ri++){
+      var r=s.rounds[ri];
+      if(r.status!=='done') continue;
+      var sc2=r.score;
+      for(var ci=0;ci<r.courts.length;ci++){
+        var ct=r.courts[ci];
+        var sc3=sc2&&sc2[ci];
+        if(!sc3) continue;
+        var won=sc3[0]>sc3[1];
+        for(var ti=0;ti<ct.t1.length;ti++){var nm=ct.t1[ti].name;if(playerStats[nm]){playerStats[nm].g++;if(won)playerStats[nm].w++;}}
+        for(var ti2=0;ti2<ct.t2.length;ti2++){var nm2=ct.t2[ti2].name;if(playerStats[nm2]){playerStats[nm2].g++;if(!won)playerStats[nm2].w++;}}
+      }
+    }
+
+    h+='<div class="si2" data-sid="'+s.id+'">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+    h+='<div><div class="sd2">'+fmtDate(s.date)+'</div>';
+    h+='<div class="sn">'+s.name+'</div></div>';
+    if(timeStr) h+='<div style="font-size:.72rem;color:var(--tx2);text-align:right">'+timeStr+dur+'</div>';
+    h+='</div>';
+    h+='<div style="font-size:.75rem;color:var(--tx2);margin-bottom:6px">'+done+'/'+s.rounds.length+' раундов · '+s.players.length+' игроков</div>';
+    // Player results
+    h+='<div style="display:flex;flex-wrap:wrap;gap:5px">';
+    for(var pi2=0;pi2<s.players.length;pi2++){
+      var p=s.players[pi2];
+      var ps=playerStats[p.name];
+      var pct=ps&&ps.g?Math.round(ps.w/ps.g*100):0;
+      h+='<span style="background:var(--s1);border:1px solid var(--br);border-radius:8px;padding:3px 8px;font-size:.72rem">';
+      h+=sbdg(p.level)+' '+p.name;
+      if(ps&&ps.g) h+=' <span style="color:var(--g)">'+ps.w+'п</span>/<span style="color:var(--tx2)">'+ps.g+'и</span>';
+      h+='</span>';
+    }
+    h+='</div></div>';
   }
   h+='<div class="mt3"><button class="btn br2 bsm" onclick="clearHistory()">🗑 Очистить историю</button></div>';
   el.innerHTML=h;
   var items=el.querySelectorAll('.si2');
-  for(var k=0;k<items.length;k++){(function(it){it.addEventListener('click',function(){loadSession(it.getAttribute('data-sid'));});})(items[k]);}
+  for(var k2=0;k2<items.length;k2++){(function(it){it.addEventListener('click',function(){loadSession(it.getAttribute('data-sid'));});})(items[k2]);}
 }
 
 function loadSession(id) {
@@ -983,6 +1126,8 @@ function autoSave() {
       players: players.map(function(p){ return {name:p.name,level:p.level}; }),
       sesName: sesName,
       sesId: sesId,
+      sesStartTime: sesStartTime,
+      sesEndTime: sesEndTime,
       rounds: rounds.map(function(r){
         return {
           status: r.status,
@@ -1011,6 +1156,8 @@ function autoRestore() {
     players = data.players.map(function(p){ return {name:p.name,level:p.level,id:Date.now()+Math.random()}; });
     sesName = data.sesName || '';
     sesId = data.sesId || null;
+    sesStartTime = data.sesStartTime || null;
+    sesEndTime = data.sesEndTime || null;
     if(sesName) {
       document.getElementById('isess').value = sesName;
       document.getElementById('hdrInfo').textContent = sesName + ' · ' + players.length + ' игр.';
