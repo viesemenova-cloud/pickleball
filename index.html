@@ -19,8 +19,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:13p
 header h1{font-family:'Bebas Neue',sans-serif;font-size:1.7rem;letter-spacing:3px;color:var(--ac)}
 .hr{display:flex;align-items:center;gap:8px}
 .hi{font-size:.75rem;color:var(--tx2)}
-.tabs{display:flex;background:var(--s1);border-bottom:1px solid var(--br)}
-.tab{flex:1;padding:9px 4px 7px;border:none;background:transparent;color:var(--tx2);font-family:'DM Sans',sans-serif;font-size:.68rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px}
+.tabs{display:flex;background:var(--s1);border-bottom:1px solid var(--br);justify-content:center}
+.tab{flex:0 0 auto;min-width:80px;padding:9px 16px 7px;border:none;background:transparent;color:var(--tx2);font-family:'DM Sans',sans-serif;font-size:.75rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px}
 .tab.on{color:var(--ac);border-bottom-color:var(--ac)}
 .tic{font-size:1rem}
 .cnt{flex:1;padding:13px;max-width:900px;width:100%;margin:0 auto}
@@ -75,7 +75,7 @@ select option{background:var(--s2)}
 .dr input{flex:1}
 .sch{display:inline-flex;align-items:center;gap:4px;margin:3px;padding:4px 9px;background:var(--s2);border:1px solid var(--br);border-radius:16px;font-size:.78rem;cursor:pointer}
 .sch:hover{border-color:var(--ac)}
-.si2{background:var(--s2);border:1px solid var(--br);border-radius:8px;padding:10px 13px;margin-bottom:7px;cursor:pointer}
+.si2{background:var(--s2);border:1px solid var(--br);border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:border .15s}
 .si2:hover{border-color:var(--ac)}
 .sd2{font-size:.73rem;color:var(--tx2);margin-bottom:3px}
 .sn{font-size:.85rem;font-weight:500}
