@@ -205,6 +205,7 @@ tr:hover td{background:var(--s2)}
           </div>
           <div class="fx g2">
             <button class="btn bg" onclick="generate()">⚡ Сгенерировать</button>
+            <button class="btn bgh bsm" id="regen-btn" onclick="regenerate()" style="display:none">🔄 Перегенерировать</button>
             <button class="btn bgh bsm" onclick="newSession()">+ Новая</button>
           </div>
         </div>
@@ -591,6 +592,16 @@ function generate() {
   showTab('rounds');
   autoSave();
   saveToHistory(true);
+  var rb=document.getElementById('regen-btn');
+  if(rb) rb.style.display='';
+}
+
+function regenerate() {
+  if(!players.length){alert('Нет игроков');return;}
+  if(!confirm('Перегенерировать все раунды? Текущее распределение будет заменено.')) return;
+  // Reset scores and statuses, keep players and session info
+  rounds=[];
+  generate();
 }
 
 function newSession() {
@@ -911,8 +922,9 @@ function autoRestore() {
   if(data.rounds&&data.rounds.length){
     rounds=data.rounds.map(function(r){return{status:r.status,score:r.score||{},waiting:r.waiting||[],courts:r.courts.map(function(c){return{type:c.type,t1:c.t1,t2:c.t2};})};});
     renderPlayers();renderRounds();showTab('rounds');
-    // Silently sync to history (update existing or add new)
     if(sesId) saveToHistory(true);
+    var rb2=document.getElementById('regen-btn');
+    if(rb2) rb2.style.display='';
   } else {
     renderPlayers();
   }
