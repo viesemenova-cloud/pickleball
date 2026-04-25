@@ -233,7 +233,10 @@ tr:hover td{background:var(--s2)}
     <!-- TABLE -->
     <div class="pane" id="pane-table">
       <div class="card">
-        <div class="ct">Турнирная таблица</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
+          <div class="ct" style="margin-bottom:0">Турнирная таблица</div>
+          <button class="btn bbl bsm" onclick="shareTable()">🔗 Поделиться</button>
+        </div>
         <div class="tw"><table>
           <thead><tr><th>#</th><th>Игрок</th><th>Ур.</th><th>Игр</th><th>Побед</th><th>%</th><th>Очков за</th><th>Против</th><th>+/-</th></tr></thead>
           <tbody id="tbly"><tr><td colspan="9" class="empty">Нет данных</td></tr></tbody>
@@ -993,11 +996,134 @@ function deleteSession(id) {
 function clearHistory(){if(!confirm('Удалить ВСЮ историю?')) return;store('pb_sessions',[]);renderHistory();}
 
 // ============================================================
+//  SHARE TABLE
+// ============================================================
+function shareTable() {
+  if(!rounds.length){alert('Нет данных для sharing');return;}
+  // Build minimal data object for sharing
+  var stats = buildStats();
+  if(!stats.rows.length){alert('Нет завершённых раундов со счётом');return;}
+  var shareData = {
+    name: sesName||'Сессия',
+    date: document.getElementById('idate').value||new Date().toISOString().slice(0,10),
+    rows: stats.rows,
+    pairs: stats.pairs
+  };
+  var json = JSON.stringify(shareData);
+  var encoded = btoa(unescape(encodeURIComponent(json)));
+  var url = window.location.origin + window.location.pathname + '?share=' + encoded;
+  if(navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(function(){
+      alert('Ссылка скопирована! Отправь её друзьям.');
+    }).catch(function(){
+      prompt('Скопируй ссылку:', url);
+    });
+  } else {
+    prompt('Скопируй ссылку:', url);
+  }
+}
+
+function buildStats() {
+  var stats={}, pairSt={};
+  for(var pi=0;pi<players.length;pi++) stats[players[pi].name]={name:players[pi].name,level:players[pi].level,games:0,wins:0,pf:0,pa:0};
+  for(var ri=0;ri<rounds.length;ri++){
+    var r=rounds[ri];if(r.status!=='done') continue;
+    for(var ci=0;ci<r.courts.length;ci++){
+      var sc=r.score&&r.score[ci];if(!sc) continue;
+      var s0=sc[0],s1=sc[1],w1=s0>s1,t1=r.courts[ci].t1,t2=r.courts[ci].t2;
+      for(var i=0;i<t1.length;i++){var nm=t1[i].name;if(!stats[nm])stats[nm]={name:nm,level:t1[i].level,games:0,wins:0,pf:0,pa:0};stats[nm].games++;if(w1)stats[nm].wins++;stats[nm].pf+=s0;stats[nm].pa+=s1;}
+      for(var j=0;j<t2.length;j++){var nm2=t2[j].name;if(!stats[nm2])stats[nm2]={name:nm2,level:t2[j].level,games:0,wins:0,pf:0,pa:0};stats[nm2].games++;if(!w1)stats[nm2].wins++;stats[nm2].pf+=s1;stats[nm2].pa+=s0;}
+      var teams=[[t1,w1],[t2,!w1]];
+      for(var ti=0;ti<teams.length;ti++){var team=teams[ti][0],won=teams[ti][1];if(team.length<2)continue;var pk=pkey(team[0],team[1]);var pl=[team[0].name,team[1].name].sort().join(' & ');if(!pairSt[pk])pairSt[pk]={pair:pl,games:0,wins:0};pairSt[pk].games++;if(won)pairSt[pk].wins++;}
+    }
+  }
+  var rows=[];for(var k in stats) rows.push(stats[k]);
+  rows.sort(function(a,b){return b.wins-a.wins||(b.pf-b.pa)-(a.pf-a.pa);});
+  var pairs=[];for(var pk2 in pairSt) pairs.push(pairSt[pk2]);
+  pairs.sort(function(a,b){return b.wins-a.wins;});
+  return {rows:rows, pairs:pairs};
+}
+
+// Check if opened with share link
+function checkShareLink() {
+  var params = window.location.search;
+  if(!params) return false;
+  var match = params.match(/[?&]share=([^&]+)/);
+  if(!match) return false;
+  try {
+    var json = decodeURIComponent(escape(atob(match[1])));
+    var data = JSON.parse(json);
+    showShareView(data);
+    return true;
+  } catch(e) { return false; }
+}
+
+function showShareView(data) {
+  // Replace entire page with beautiful read-only table
+  var mn=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  var d = new Date(data.date+'T12:00:00');
+  var dateStr = d.getDate()+' '+mn[d.getMonth()]+' '+d.getFullYear();
+
+  function lvC(l){return 'lv'+l}
+  function lvL(l){return l===1?'🔵 Нач.':l===2?'🟢 Ср.':'🟡 Топ'}
+  function bdg(l){return '<span class="lb '+lvC(l)+'">'+lvL(l)+'</span>'}
+
+  var h = '';
+  h += '<div style="max-width:700px;margin:0 auto;padding:24px 16px">';
+  // Header
+  h += '<div style="text-align:center;margin-bottom:28px">';
+  h += '<div style="font-family:Bebas Neue,sans-serif;font-size:2.5rem;letter-spacing:4px;color:var(--ac)">🏆 '+data.name+'</div>';
+  h += '<div style="color:var(--tx2);font-size:.9rem;margin-top:6px">'+dateStr+'</div>';
+  h += '</div>';
+
+  // Main table
+  h += '<div class="card" style="margin-bottom:20px">';
+  h += '<div class="ct">Турнирная таблица</div>';
+  h += '<div class="tw"><table><thead><tr>';
+  h += '<th>#</th><th>Игрок</th><th>Ур.</th><th>Игр</th><th>Побед</th><th>%</th><th>За</th><th>Прот.</th><th>+/-</th>';
+  h += '</tr></thead><tbody>';
+  for(var i=0;i<data.rows.length;i++){
+    var row=data.rows[i];
+    var pct=row.games?Math.round(row.wins/row.games*100):0;
+    var diff=row.pf-row.pa;
+    h+='<tr'+(i===0?' class="gold"':'')+'>';
+    h+='<td>'+(i+1)+'</td><td><strong>'+row.name+'</strong></td><td>'+bdg(row.level)+'</td>';
+    h+='<td>'+row.games+'</td><td>'+row.wins+'</td><td>'+pct+'%</td>';
+    h+='<td>'+row.pf+'</td><td>'+row.pa+'</td>';
+    h+='<td style="color:'+(diff>=0?'var(--g)':'var(--r)') +';font-weight:600">'+(diff>0?'+':'')+diff+'</td>';
+    h+='</tr>';
+  }
+  h += '</tbody></table></div></div>';
+
+  // Pairs table
+  if(data.pairs&&data.pairs.length){
+    h += '<div class="card">';
+    h += '<div class="ct">Статистика пар</div>';
+    h += '<div class="tw"><table><thead><tr><th>Пара</th><th>Игр</th><th>Побед</th><th>%</th></tr></thead><tbody>';
+    for(var j=0;j<data.pairs.length;j++){
+      var pair=data.pairs[j];
+      var ppct=pair.games?Math.round(pair.wins/pair.games*100):0;
+      h+='<tr><td>'+pair.pair+'</td><td>'+pair.games+'</td><td>'+pair.wins+'</td><td>'+ppct+'%</td></tr>';
+    }
+    h += '</tbody></table></div></div>';
+  }
+
+  // Footer
+  h += '<div style="text-align:center;padding:20px;color:var(--tx2);font-size:.8rem">';
+  h += 'Pickleball · <a href="'+window.location.origin+window.location.pathname+'" style="color:var(--ac)">Открыть приложение</a>';
+  h += '</div></div>';
+
+  document.querySelector('.app').innerHTML = h;
+}
+
+// ============================================================
 //  INIT
 // ============================================================
 setToday();
 renderSavedPlayers();
-autoRestore();
+if(!checkShareLink()) {
+  autoRestore();
+}
 </script>
 </body>
 </html>
