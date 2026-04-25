@@ -592,7 +592,7 @@ function generate() {
 
 function newSession() {
   if(rounds.length&&!confirm('Начать новую сессию? Текущие данные будут очищены.')) return;
-  players=[]; rounds=[]; sesName=''; sesId=null; sesStartTime=null; sesEndTime=null;
+  players=[]; rounds=[]; sesName=''; sesId=Date.now(); sesStartTime=null; sesEndTime=null;
   document.getElementById('isess').value='';
   document.getElementById('hdrInfo').textContent='Новая сессия';
   setToday();
@@ -849,7 +849,7 @@ function sesData() {
   var dateVal=document.getElementById('idate').value;
   var dateISO=dateVal?new Date(dateVal+'T12:00:00').toISOString():new Date().toISOString();
   return {
-    id:sesId||Date.now(), name:sesName||'Сессия', date:dateISO,
+    id:sesId, name:sesName||'Сессия', date:dateISO,
     startTime:sesStartTime, endTime:sesEndTime,
     players:players.map(function(p){return{name:p.name,level:p.level};}),
     rounds:rounds.map(function(r){return{status:r.status,score:r.score,
@@ -862,13 +862,18 @@ function sesData() {
 
 function saveToHistory(silent) {
   if(!rounds.length) return;
+  // Assign a stable ID before anything else
+  if(!sesId) sesId = Date.now();
   var sessions=retrieve('pb_sessions')||[];
-  var idx=-1;for(var i=0;i<sessions.length;i++){if(sessions[i].id===sesId){idx=i;break;}}
+  // Use String comparison to avoid type mismatch
+  var idx=-1;
+  for(var i=0;i<sessions.length;i++){
+    if(String(sessions[i].id)===String(sesId)){idx=i;break;}
+  }
   var sess=sesData();
   if(idx>=0) sessions[idx]=sess; else sessions.unshift(sess);
   if(sessions.length>50) sessions.pop();
   store('pb_sessions',sessions);
-  sesId=sess.id;
   if(!silent) alert('Сессия сохранена!');
 }
 
@@ -879,6 +884,7 @@ function manualSave() {
 
 function autoSave() {
   try {
+    if(!sesId) sesId=Date.now();
     var data=sesData();
     data.players=players.map(function(p){return{name:p.name,level:p.level};});
     store('pb_autosave',{sesName:sesName,sesId:sesId,sesStartTime:sesStartTime,sesEndTime:sesEndTime,players:players.map(function(p){return{name:p.name,level:p.level};}),rounds:data.rounds,dateVal:document.getElementById('idate').value});
@@ -900,6 +906,8 @@ function autoRestore() {
   if(data.rounds&&data.rounds.length){
     rounds=data.rounds.map(function(r){return{status:r.status,score:r.score||{},waiting:r.waiting||[],courts:r.courts.map(function(c){return{type:c.type,t1:c.t1,t2:c.t2};})};});
     renderPlayers();renderRounds();showTab('rounds');
+    // Make sure this session appears in history
+    saveToHistory(true);
   } else {
     renderPlayers();
   }
