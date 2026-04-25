@@ -592,6 +592,8 @@ function generate() {
 
 function newSession() {
   if(rounds.length&&!confirm('Начать новую сессию? Текущие данные будут очищены.')) return;
+  // Save current session to history BEFORE clearing
+  if(rounds.length) saveToHistory(true);
   players=[]; rounds=[]; sesName=''; sesId=Date.now(); sesStartTime=null; sesEndTime=null;
   document.getElementById('isess').value='';
   document.getElementById('hdrInfo').textContent='Новая сессия';
@@ -906,8 +908,8 @@ function autoRestore() {
   if(data.rounds&&data.rounds.length){
     rounds=data.rounds.map(function(r){return{status:r.status,score:r.score||{},waiting:r.waiting||[],courts:r.courts.map(function(c){return{type:c.type,t1:c.t1,t2:c.t2};})};});
     renderPlayers();renderRounds();showTab('rounds');
-    // Make sure this session appears in history
-    saveToHistory(true);
+    // Silently sync to history (update existing or add new)
+    if(sesId) saveToHistory(true);
   } else {
     renderPlayers();
   }
