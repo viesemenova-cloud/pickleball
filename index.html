@@ -495,6 +495,20 @@ function applyEditPlayer() {
 // ============================================================
 function balance(t1,t2){return -Math.abs(t1.reduce(function(s,p){return s+p.level;},0)-t2.reduce(function(s,p){return s+p.level;},0))}
 
+function slotPairKey(slot) {
+  if(slot.courts) {
+    var parts = [];
+    for(var i=0;i<slot.courts.length;i++){
+      var c=slot.courts[i];
+      parts.push(c.t1.map(function(p){return p.name;}).sort().join('+')+' vs '+c.t2.map(function(p){return p.name;}).sort().join('+'));
+    }
+    return parts.sort().join('|');
+  }
+  var t1n = slot.t1.map(function(p){return p.name;}).sort().join('+');
+  var t2n = slot.t2.map(function(p){return p.name;}).sort().join('+');
+  return [t1n,t2n].sort().join(' vs ');
+}
+
 function generate() {
   if(players.length<4){alert('Нужно минимум 4 игрока!');return;}
   sesName=document.getElementById('isess').value.trim();
@@ -509,83 +523,152 @@ function generate() {
   var nW=Math.max(0,players.length-nC*4);
   rounds=[];
 
-  // Build all (waiter_combo, pairing) slots
-  var allSlots=[];
-  if(nW===0){
-    var prs=allPairs(players);
-    for(var bp=0;bp<prs.length;bp++) allSlots.push({waiters:[],t1:prs[bp].t1,t2:prs[bp].t2,bal:balance(prs[bp].t1,prs[bp].t2)});
+  // Build ALL unique slots: (waiter_combo, pairing)
+  // For 5 players: 5 waiters x 3 pairings = exactly 15 unique slots
+  var allSlots = [];
+  var nW = Math.max(0, players.length - nC * 4);
+
+  if(nW === 0) {
+    // 4 players: no waiting, 3 pairings
+    var basePrs = allPairs(players);
+    for(var bp = 0; bp < basePrs.length; bp++) {
+      allSlots.push({waiters:[], t1:basePrs[bp].t1, t2:basePrs[bp].t2, bal:balance(basePrs[bp].t1,basePrs[bp].t2)});
+    }
+  } else if(nC === 1) {
+    // 1 court: enumerate all (waiter_combo, pairing) slots
+    var wcAll = combos(players, nW);
+    for(var wca = 0; wca < wcAll.length; wca++) {
+      var wcArr = wcAll[wca];
+      var wcSet = {};
+      for(var wcx = 0; wcx < wcArr.length; wcx++) wcSet[wcArr[wcx].name] = true;
+      var wcActive = players.filter(function(p){ return !wcSet[p.name]; });
+      var wcPrs = allPairs(wcActive);
+      for(var wcp = 0; wcp < wcPrs.length; wcp++) {
+        var t1w = wcPrs[wcp].t1, t2w = wcPrs[wcp].t2;
+        allSlots.push({waiters:wcArr, t1:t1w, t2:t2w, bal:balance(t1w,t2w)});
+      }
+    }
   } else {
-    var wcAll=combos(players,nW);
-    for(var wca=0;wca<wcAll.length;wca++){
-      var wcArr=wcAll[wca];
-      var wcSet={};for(var wcx=0;wcx<wcArr.length;wcx++) wcSet[wcArr[wcx].name]=true;
-      var active=players.filter(function(p){return !wcSet[p.name];});
-      // For 2 courts, split active into 2 groups
-      if(nC===2){
-        var tried={};
-        var cb=combos(active,4);
-        for(var ci=0;ci<cb.length;ci++){
-          var g1=cb[ci];
-          var gk=g1.map(function(p){return p.name;}).sort().join(',');
-          if(tried[gk]) continue;
-          var g2=active.filter(function(p){for(var x=0;x<g1.length;x++){if(g1[x].name===p.name)return false;}return true;});
-          tried[gk]=true;
-          var p1s=allPairs(g1),p2s=allPairs(g2);
-          for(var a=0;a<p1s.length;a++) for(var b=0;b<p2s.length;b++){
-            var bl=balance(p1s[a].t1,p1s[a].t2)+balance(p2s[b].t1,p2s[b].t2);
-            allSlots.push({waiters:wcArr,courts:[{t1:p1s[a].t1,t2:p1s[a].t2,type:'court1'},{t1:p2s[b].t1,t2:p2s[b].t2,type:'court2'}],bal:bl});
-          }
-        }
-      } else {
-        var wcPairs=allPairs(active);
-        for(var wcp=0;wcp<wcPairs.length;wcp++){
-          var bl2=balance(wcPairs[wcp].t1,wcPairs[wcp].t2);
-          allSlots.push({waiters:wcArr,t1:wcPairs[wcp].t1,t2:wcPairs[wcp].t2,bal:bl2});
+    // 2 courts
+    var wcAll2 = combos(players, nW);
+    for(var wca2 = 0; wca2 < wcAll2.length; wca2++) {
+      var wcArr2 = wcAll2[wca2];
+      var wcSet2 = {};
+      for(var wcx2 = 0; wcx2 < wcArr2.length; wcx2++) wcSet2[wcArr2[wcx2].name] = true;
+      var active2 = players.filter(function(p){ return !wcSet2[p.name]; });
+      var tried2 = {};
+      var cb2 = combos(active2, 4);
+      for(var ci2 = 0; ci2 < cb2.length; ci2++) {
+        var g1 = cb2[ci2];
+        var gk = g1.map(function(p){return p.name;}).sort().join(',');
+        if(tried2[gk]) continue;
+        var g2 = active2.filter(function(p){for(var x=0;x<g1.length;x++){if(g1[x].name===p.name)return false;}return true;});
+        tried2[gk] = true;
+        var p1s = allPairs(g1), p2s = allPairs(g2);
+        for(var a = 0; a < p1s.length; a++) for(var b = 0; b < p2s.length; b++) {
+          var bl = balance(p1s[a].t1,p1s[a].t2) + balance(p2s[b].t1,p2s[b].t2);
+          allSlots.push({waiters:wcArr2, courts:[{t1:p1s[a].t1,t2:p1s[a].t2,type:'court1'},{t1:p2s[b].t1,t2:p2s[b].t2,type:'court2'}], bal:bl});
         }
       }
     }
   }
 
-  var playerWC={};for(var pw=0;pw<players.length;pw++) playerWC[players[pw].name]=0;
-  var slotUse=[];for(var su=0;su<allSlots.length;su++) slotUse.push(0);
-  var lastW={};
-  var recentPK=[];
+  // Shuffle for randomness
+  shuffle(allSlots);
 
-  for(var r=0;r<nR;r++){
-    var bestScore=null,bestSlot=null,bestSI=-1;
-    for(var si=0;si<allSlots.length;si++){
-      var slot=allSlots[si];
-      var conflict=false;
-      for(var cx=0;cx<slot.waiters.length;cx++){if(lastW[slot.waiters[cx].name]){conflict=true;break;}}
-      if(conflict) continue;
-      var waitSum=0;
-      for(var wx=0;wx<slot.waiters.length;wx++) waitSum+=playerWC[slot.waiters[wx].name]||0;
-      var pk8=slot.courts?'c2':pkey(slot.t1[0],slot.t1[1])+'|'+pkey(slot.t2[0],slot.t2[1]);
-      var recency=recentPK.indexOf(pk8);
-      var rec=recency>=0?(recentPK.length-recency):0;
-      var score=(-waitSum*100)+(-rec*60)+(-slotUse[si]*40)+slot.bal*8;
-      if(bestScore===null||score>bestScore){bestScore=score;bestSlot=slot;bestSI=si;}
-    }
-    if(!bestSlot){
-      for(var fb=0;fb<allSlots.length;fb++){
-        var cf2=false;for(var cx2=0;cx2<allSlots[fb].waiters.length;cx2++){if(lastW[allSlots[fb].waiters[cx2].name]){cf2=true;break;}}
-        if(!cf2){bestSlot=allSlots[fb];bestSI=fb;break;}
+  // Build schedule using greedy Hamiltonian path:
+  // - No consecutive same waiter group
+  // - Minimize pair repeats
+  // - Best balance
+  var schedule = [];
+  var schedUsed = [];
+  for(var su2 = 0; su2 < allSlots.length; su2++) schedUsed.push(false);
+
+  // Try a few starting points, pick best result
+  var bestSchedule = null, bestConsec = 999, bestRepeat = 999;
+
+  for(var attempt = 0; attempt < Math.min(5, allSlots.length); attempt++) {
+    var seq = [allSlots[attempt]];
+    var seqUsed = [attempt];
+    var seqUsedSet = {};
+    seqUsedSet[attempt] = true;
+    var recentPairKeys = {};
+    var rpKey = slotPairKey(allSlots[attempt]);
+    recentPairKeys[rpKey] = 1;
+
+    for(var step = 1; step < nR; step++) {
+      var last = seq[seq.length - 1];
+      var lastWN = {};
+      for(var lw = 0; lw < last.waiters.length; lw++) lastWN[last.waiters[lw].name] = true;
+
+      // Find candidates: not used yet (if available), no waiter conflict
+      var candidates = [];
+      for(var si = 0; si < allSlots.length; si++) {
+        if(seqUsedSet[si]) continue;
+        var s = allSlots[si];
+        var conflict = false;
+        for(var cx = 0; cx < s.waiters.length; cx++) { if(lastWN[s.waiters[cx].name]){ conflict=true; break; } }
+        if(conflict) continue;
+        var pk = slotPairKey(s);
+        var recency = recentPairKeys[pk] ? recentPairKeys[pk] : 0;
+        candidates.push({idx:si, slot:s, score: s.bal * 2 - recency * 10});
       }
+
+      // Fallback: allow reuse if no unused candidates
+      if(!candidates.length) {
+        for(var si2 = 0; si2 < allSlots.length; si2++) {
+          var s2 = allSlots[si2];
+          var cf2 = false;
+          for(var cx2 = 0; cx2 < s2.waiters.length; cx2++) { if(lastWN[s2.waiters[cx2].name]){ cf2=true; break; } }
+          if(cf2) continue;
+          var pk2 = slotPairKey(s2);
+          var rec2 = recentPairKeys[pk2] ? recentPairKeys[pk2] : 0;
+          candidates.push({idx:si2, slot:s2, score: s2.bal * 2 - rec2 * 10});
+        }
+      }
+
+      if(!candidates.length) break;
+
+      // Sort by score, pick randomly from top 3
+      candidates.sort(function(a,b){ return b.score - a.score; });
+      var topN2 = Math.min(3, candidates.length);
+      var pick = candidates[Math.floor(Math.random() * topN2)];
+
+      seq.push(pick.slot);
+      seqUsedSet[pick.idx] = true;
+      var rpk2 = slotPairKey(pick.slot);
+      recentPairKeys[rpk2] = (recentPairKeys[rpk2]||0) + 1;
     }
-    if(!bestSlot){bestSlot=allSlots[r%allSlots.length];bestSI=r%allSlots.length;}
 
-    var courts=bestSlot.courts||[{t1:bestSlot.t1,t2:bestSlot.t2,type:'main'}];
-    rounds.push({courts:courts,waiting:bestSlot.waiters,score:{},status:'pending'});
-    slotUse[bestSI]++;
-
-    var pkR=bestSlot.courts?'c2_'+r:pkey(bestSlot.t1[0],bestSlot.t1[1])+'|'+pkey(bestSlot.t2[0],bestSlot.t2[1]);
-    recentPK.unshift(pkR);if(recentPK.length>8) recentPK.pop();
-
-    lastW={};
-    for(var lw=0;lw<bestSlot.waiters.length;lw++){
-      playerWC[bestSlot.waiters[lw].name]=(playerWC[bestSlot.waiters[lw].name]||0)+1;
-      lastW[bestSlot.waiters[lw].name]=true;
+    // Score this attempt
+    var consec2 = 0;
+    for(var ei = 1; ei < seq.length; ei++) {
+      var prevW = seq[ei-1].waiters.map(function(p){return p.name;}).sort().join(',');
+      var currW = seq[ei].waiters.map(function(p){return p.name;}).sort().join(',');
+      if(prevW === currW) consec2++;
     }
+    var pairC2 = {};
+    for(var pi3 = 0; pi3 < seq.length; pi3++) {
+      var pk3 = slotPairKey(seq[pi3]);
+      pairC2[pk3] = (pairC2[pk3]||0) + 1;
+    }
+    var maxR2 = 0;
+    for(var k3 in pairC2) if(pairC2[k3] > maxR2) maxR2 = pairC2[k3];
+
+    if(bestSchedule === null || consec2 < bestConsec || (consec2 === bestConsec && maxR2 < bestRepeat)) {
+      bestSchedule = seq;
+      bestConsec = consec2;
+      bestRepeat = maxR2;
+    }
+    if(bestConsec === 0 && bestRepeat <= 1) break; // Perfect, stop early
+  }
+
+  // Build rounds from best schedule
+  rounds = [];
+  for(var ri2 = 0; ri2 < nR; ri2++) {
+    var slot = bestSchedule[ri2 % bestSchedule.length];
+    var courts = slot.courts || [{t1:slot.t1, t2:slot.t2, type:'main'}];
+    rounds.push({courts:courts, waiting:slot.waiters, score:{}, status:'pending'});
   }
 
   renderRounds();
@@ -598,8 +681,7 @@ function generate() {
 
 function regenerate() {
   if(!players.length){alert('Нет игроков');return;}
-  if(!confirm('Перегенерировать все раунды? Текущее распределение будет заменено.')) return;
-  // Reset scores and statuses, keep players and session info
+  if(rounds.length&&!confirm('Перегенерировать все раунды? Текущее распределение будет заменено.')) return;
   rounds=[];
   generate();
 }
