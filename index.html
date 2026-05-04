@@ -141,6 +141,8 @@ tr:hover td{background:var(--s2)}
 .chip{display:inline-flex;align-items:center;gap:4px;margin:2px;padding:4px 9px;background:var(--s2);border:1px solid var(--br);border-radius:16px;font-size:.78rem;cursor:pointer;transition:border .15s}
 .chip:hover{border-color:var(--ac)}
 @media(max-width:530px){.twoc{grid-template-columns:1fr}}
+@media(max-width:600px){.hide-xs{display:none}}
+table{font-size:.82rem}
 </style>
 </head>
 <body>
@@ -239,7 +241,17 @@ tr:hover td{background:var(--s2)}
           <button class="btn bbl bsm" onclick="shareTable()">🔗 Поделиться</button>
         </div>
         <div class="tw"><table>
-          <thead><tr><th>#</th><th>Игрок</th><th>Ур.</th><th>Игр</th><th>Побед</th><th>%</th><th>Очков за</th><th>Против</th><th>+/-</th></tr></thead>
+          <thead><tr>
+            <th>#</th>
+            <th>Игрок</th>
+            <th class="hide-xs">Ур.</th>
+            <th class="hide-xs">Игр</th>
+            <th>Побед</th>
+            <th>%</th>
+            <th class="hide-xs">За</th>
+            <th class="hide-xs">Прот.</th>
+            <th>+/-</th>
+          </tr></thead>
           <tbody id="tbly"><tr><td colspan="9" class="empty">Нет данных</td></tr></tbody>
         </table></div>
       </div>
@@ -580,14 +592,73 @@ function generate() {
   // Pure backtracking - no fallback that breaks constraints
   var foundSeq = null;
 
+  function getPairs(slot) {
+    // Returns array of individual pair keys from a slot
+    var pairs = [];
+    if(slot.courts) {
+      for(var ci=0;ci<slot.courts.length;ci++){
+        pairs.push(mkPK(slot.courts[ci].t1, slot.courts[ci].t2));
+      }
+    } else {
+      pairs.push(mkPK(slot.t1, slot.t2));
+    }
+    return pairs;
+  }
+
+  function hasIndividualPairOverlap(prev, curr) {
+    // Check if ANY individual pair (by player names) repeats between rounds
+    var prevPairs = getPairs(prev);
+    var currPairs = getPairs(curr);
+    for(var i=0;i<prevPairs.length;i++){
+      for(var j=0;j<currPairs.length;j++){
+        if(prevPairs[i]===currPairs[j]) return true;
+      }
+    }
+    return false;
+  }
+
+  function hasPlayerOverlap(prev, curr) {
+    // Check if ANY individual player appears in same position (same teammate)
+    // This catches e.g. Оля+Коля appearing in consecutive rounds
+    var prevPlayerPairs = [];
+    var currPlayerPairs = [];
+    function addPlayerPairs(slot, arr) {
+      if(slot.courts) {
+        for(var ci=0;ci<slot.courts.length;ci++){
+          var t1=slot.courts[ci].t1, t2=slot.courts[ci].t2;
+          for(var a=0;a<t1.length;a++) for(var b=a+1;b<t1.length;b++) arr.push(t1[a].name+'&'+t1[b].name);
+          for(var a2=0;a2<t2.length;a2++) for(var b2=a2+1;b2<t2.length;b2++) arr.push(t2[a2].name+'&'+t2[b2].name);
+        }
+      } else {
+        var t1s=slot.t1,t2s=slot.t2;
+        for(var a3=0;a3<t1s.length;a3++) for(var b3=a3+1;b3<t1s.length;b3++) arr.push(t1s[a3].name+'&'+t1s[b3].name);
+        for(var a4=0;a4<t2s.length;a4++) for(var b4=a4+1;b4<t2s.length;b4++) arr.push(t2s[a4].name+'&'+t2s[b4].name);
+      }
+    }
+    addPlayerPairs(prev, prevPlayerPairs);
+    addPlayerPairs(curr, currPlayerPairs);
+    for(var i=0;i<prevPlayerPairs.length;i++){
+      for(var j=0;j<currPlayerPairs.length;j++){
+        if(prevPlayerPairs[i]===currPlayerPairs[j]) return true;
+      }
+    }
+    return false;
+  }
+
   function btSearch(seq, rem) {
     if(foundSeq) return;
     if(seq.length === allSlots2.length) { foundSeq = seq.slice(); return; }
     var last = seq.length ? seq[seq.length-1] : null;
     for(var i=0;i<rem.length;i++){
       var s=rem[i];
-      // HARD constraints
-      if(last && (last.wk===s.wk || last.pk===s.pk)) continue;
+      if(last) {
+        // HARD 1: same waiter group
+        if(last.wk===s.wk) continue;
+        // HARD 2: same court composition (by player names, not level)
+        if(hasIndividualPairOverlap(last, s)) continue;
+        // HARD 3: same teammate pair
+        if(hasPlayerOverlap(last, s)) continue;
+      }
       seq.push(s);
       var newRem=rem.slice(0,i).concat(rem.slice(i+1));
       btSearch(seq, newRem);
@@ -675,10 +746,10 @@ function rHtml(r,i) {
   if(r.status==='pending'){
     h+='<button class="btn by bsm" data-a="start" data-i="'+i+'">▶ Начать</button>';
     h+='<button class="btn bgh bsm" data-a="shuf" data-i="'+i+'" title="Перетасовать">🎲</button>';
-    h+='<button class="btn bgh bsm" data-a="edit" data-i="'+i+'" title="Редактировать">✏️</button>';
   }
   if(r.status==='playing') h+='<button class="btn bg bsm" data-a="fin" data-i="'+i+'">✓ Завершить</button>';
   if(r.status==='done') h+='<button class="btn bgh bsm" data-a="reopen" data-i="'+i+'" title="Переиграть">↩</button>';
+  h+='<button class="btn bgh bsm" data-a="edit" data-i="'+i+'" title="Редактировать">✏️</button>';
   h+='</div></div><div class="rb"><div class="crow">';
   for(var ci=0;ci<r.courts.length;ci++) h+=cHtml(r,i,ci);
   h+='</div>';
@@ -854,15 +925,38 @@ function renderEB(){
     }
     h+='</div></div></div>';
   }
-  if(waiting.length){h+='<div style="padding-top:11px;border-top:1px solid var(--br)"><div style="font-size:.68rem;color:var(--tx2);margin-bottom:6px;font-weight:600">ОЖИДАЮТ</div>';for(var wi=0;wi<waiting.length;wi++) h+='<span class="wc">'+waiting[wi].name+' '+sbdg(waiting[wi].level)+'</span> ';h+='</div>';}
+  if(waiting.length){
+    h+='<div style="padding-top:11px;border-top:1px solid var(--br)">';
+    h+='<div style="font-size:.68rem;color:var(--tx2);margin-bottom:8px;font-weight:600">ОЖИДАЮТ (можно поменять)</div>';
+    for(var wi=0;wi<waiting.length;wi++){
+      h+='<select style="width:100%;margin-bottom:6px" data-ci="wait" data-tm="wait" data-si="'+wi+'">';
+      for(var wpi=0;wpi<all.length;wpi++){
+        var wsel=(waiting[wi]&&waiting[wi].name===all[wpi].name)?' selected':'';
+        h+='<option value="'+wpi+'"'+wsel+'>'+all[wpi].name+' ('+all[wpi].level+')</option>';
+      }
+      h+='</select>';
+    }
+    h+='</div>';
+  }
   document.getElementById('ebody').innerHTML=h;
 }
 function applyEdit(){
   if(!editState) return;
-  var all=editState.all,courts=editState.courts;
+  var all=editState.all,courts=editState.courts,waiting=editState.waiting.slice();
   var sels=document.getElementById('ebody').querySelectorAll('select');
-  for(var i=0;i<sels.length;i++){var s=sels[i];courts[parseInt(s.getAttribute('data-ci'))][s.getAttribute('data-tm')][parseInt(s.getAttribute('data-si'))]=all[parseInt(s.value)];}
+  for(var i=0;i<sels.length;i++){
+    var s=sels[i];
+    var ci=s.getAttribute('data-ci');
+    var tm=s.getAttribute('data-tm');
+    var si=parseInt(s.getAttribute('data-si'));
+    if(ci==='wait'){
+      waiting[si]=all[parseInt(s.value)];
+    } else {
+      courts[parseInt(ci)][tm][si]=all[parseInt(s.value)];
+    }
+  }
   rounds[editState.ri].courts=courts;
+  rounds[editState.ri].waiting=waiting;
   closeEdit(); renderRounds(); autoSave();
 }
 function closeEdit(){document.getElementById('emodal').className='mo';editState=null;}
