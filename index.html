@@ -162,6 +162,7 @@ table{font-size:.82rem}
     <div class="hdr-r">
       <span class="hdr-info" id="hdrInfo">Новая сессия</span>
       <button class="btn bgh bsm" onclick="manualSave()">💾 Сохранить</button>
+      <button class="btn bgh bsm" onclick="openSettings()">⚙️</button>
     </div>
   </header>
 
@@ -275,6 +276,30 @@ table{font-size:.82rem}
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="mo" id="settingsModal">
+  <div class="mb">
+    <div class="mh">
+      <span class="mtt">⚙️ Настройки</span>
+      <button class="mx" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="mbd">
+      <div class="fg">
+        <label>GitHub Personal Access Token</label>
+        <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx">
+        <div style="font-size:.72rem;color:var(--tx2);margin-top:5px">
+          Токен нужен для коротких ссылок. Хранится только в твоём браузере.
+          <br>Создай на github.com → Settings → Developer settings → Tokens (classic) → scope: repo
+        </div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn bgh" onclick="closeSettings()">Отмена</button>
+      <button class="btn by" onclick="saveSettings()">✓ Сохранить</button>
+    </div>
   </div>
 </div>
 
@@ -1180,28 +1205,77 @@ function clearHistory(){if(!confirm('Удалить ВСЮ историю?')) re
 //  SHARE TABLE
 // ============================================================
 function shareTable() {
-  if(!rounds.length){alert('Нет данных для sharing');return;}
-  // Build minimal data object for sharing
+  if(!rounds.length){alert('Нет данных');return;}
   var stats = buildStats();
   if(!stats.rows.length){alert('Нет завершённых раундов со счётом');return;}
+
   var shareData = {
     name: sesName||'Сессия',
     date: document.getElementById('idate').value||new Date().toISOString().slice(0,10),
     rows: stats.rows,
     pairs: stats.pairs
   };
+
+  var token = localStorage.getItem('pb_gh_token');
+  if(token) {
+    // Save to GitHub and get short link
+    saveShareToGitHub(shareData, token);
+  } else {
+    // Fallback to long URL
+    var json = JSON.stringify(shareData);
+    var encoded = btoa(unescape(encodeURIComponent(json)));
+    var url = window.location.origin + window.location.pathname + '?share=' + encoded;
+    if(navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(function(){
+        alert('Ссылка скопирована!\n\nСовет: добавь GitHub Token в ⚙️ Настройки чтобы получать короткие ссылки.');
+      }).catch(function(){ prompt('Скопируй ссылку:', url); });
+    } else { prompt('Скопируй ссылку:', url); }
+  }
+}
+
+function saveShareToGitHub(shareData, token) {
+  var shareId = 'share_' + Date.now();
   var json = JSON.stringify(shareData);
   var encoded = btoa(unescape(encodeURIComponent(json)));
-  var url = window.location.origin + window.location.pathname + '?share=' + encoded;
-  if(navigator.clipboard) {
-    navigator.clipboard.writeText(url).then(function(){
-      alert('Ссылка скопирована! Отправь её друзьям.');
-    }).catch(function(){
-      prompt('Скопируй ссылку:', url);
-    });
-  } else {
-    prompt('Скопируй ссылку:', url);
-  }
+
+  // Save to GitHub repo as a file in /shares/ folder
+  var apiUrl = 'https://api.github.com/repos/viesemenova-cloud/pickleball/contents/shares/' + shareId + '.json';
+
+  var body = JSON.stringify({
+    message: 'Share: ' + shareData.name,
+    content: btoa(unescape(encodeURIComponent(json)))
+  });
+
+  // Show loading
+  var btn = document.querySelector('[onclick="shareTable()"]');
+  if(btn) { btn.textContent = '⏳ Сохраняю...'; btn.disabled = true; }
+
+  fetch(apiUrl, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'token ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: body
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(btn){ btn.innerHTML = '🔗 Поделиться'; btn.disabled = false; }
+    if(data.content) {
+      var shortUrl = window.location.origin + window.location.pathname + '?s=' + shareId;
+      if(navigator.clipboard) {
+        navigator.clipboard.writeText(shortUrl).then(function(){
+          alert('✅ Короткая ссылка скопирована!\n\n' + shortUrl);
+        }).catch(function(){ prompt('Скопируй ссылку:', shortUrl); });
+      } else { prompt('Скопируй ссылку:', shortUrl); }
+    } else {
+      alert('Ошибка сохранения. Проверь токен в ⚙️ Настройках.');
+    }
+  })
+  .catch(function(e){
+    if(btn){ btn.innerHTML = '🔗 Поделиться'; btn.disabled = false; }
+    alert('Ошибка: ' + e.message);
+  });
 }
 
 function buildStats() {
@@ -1229,14 +1303,32 @@ function buildStats() {
 function checkShareLink() {
   var params = window.location.search;
   if(!params) return false;
-  var match = params.match(/[?&]share=([^&]+)/);
-  if(!match) return false;
-  try {
-    var json = decodeURIComponent(escape(atob(match[1])));
-    var data = JSON.parse(json);
-    showShareView(data);
+
+  // Long URL format: ?share=...
+  var longMatch = params.match(/[?&]share=([^&]+)/);
+  if(longMatch) {
+    try {
+      var json = decodeURIComponent(escape(atob(longMatch[1])));
+      showShareView(JSON.parse(json));
+      return true;
+    } catch(e) { return false; }
+  }
+
+  // Short URL format: ?s=share_xxx
+  var shortMatch = params.match(/[?&]s=(share_[^&]+)/);
+  if(shortMatch) {
+    var shareId = shortMatch[1];
+    var apiUrl = 'https://raw.githubusercontent.com/viesemenova-cloud/pickleball/main/shares/' + shareId + '.json';
+    // Show loading state
+    document.querySelector('.app').innerHTML = '<div style="text-align:center;padding:60px;color:var(--tx2)">⏳ Загружаю таблицу...</div>';
+    fetch(apiUrl)
+      .then(function(r){ return r.json(); })
+      .then(function(data){ showShareView(data); })
+      .catch(function(){ document.querySelector('.app').innerHTML = '<div style="text-align:center;padding:60px;color:var(--r)">❌ Ссылка недействительна или устарела</div>'; });
     return true;
-  } catch(e) { return false; }
+  }
+
+  return false;
 }
 
 function showShareView(data) {
@@ -1295,6 +1387,23 @@ function showShareView(data) {
   h += '</div></div>';
 
   document.querySelector('.app').innerHTML = h;
+}
+
+// ============================================================
+//  SETTINGS
+// ============================================================
+function openSettings() {
+  var token = localStorage.getItem('pb_gh_token')||'';
+  document.getElementById('ghToken').value = token;
+  document.getElementById('settingsModal').className = 'mo on';
+}
+function closeSettings() { document.getElementById('settingsModal').className = 'mo'; }
+function saveSettings() {
+  var token = document.getElementById('ghToken').value.trim();
+  if(token) localStorage.setItem('pb_gh_token', token);
+  else localStorage.removeItem('pb_gh_token');
+  closeSettings();
+  alert(token ? '✅ Токен сохранён!' : 'Токен удалён');
 }
 
 // ============================================================
