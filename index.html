@@ -523,147 +523,108 @@ function generate() {
   var nW=Math.max(0,players.length-nC*4);
   rounds=[];
 
-  // ---- ALGORITHM: Backtracking Hamiltonian Path ----
-  // Build all unique (waiter, pairing) slots
-  // Hard constraints: no consecutive same waiter, no consecutive same court pair
-  // This guarantees perfect variety every time
+  // ---- PERFECT SCHEDULE via Hamiltonian Path ----
+  // For 5 players: 15 unique slots, find path where:
+  // HARD: no consecutive same waiter, no consecutive same court pair
+  
+  var nW2 = Math.max(0, players.length - nC * 4);
+  var allSlots2 = [];
 
-  var nW = Math.max(0, players.length - nC * 4);
-  var allSlots = [];
-
-  function slotPK(t1arr, t2arr) {
-    var a = t1arr.map(function(p){return p.name;}).sort().join('+');
-    var b = t2arr.map(function(p){return p.name;}).sort().join('+');
+  function mkPK(t1, t2) {
+    var a = t1.map(function(p){return p.name;}).sort().join('+');
+    var b = t2.map(function(p){return p.name;}).sort().join('+');
     return a < b ? a+'|'+b : b+'|'+a;
   }
+  function mkWK(waiters) {
+    return waiters.map(function(p){return p.name;}).sort().join(',');
+  }
 
-  if(nW === 0) {
-    var bprs = allPairs(players);
-    for(var bp = 0; bp < bprs.length; bp++)
-      allSlots.push({waiters:[], t1:bprs[bp].t1, t2:bprs[bp].t2, pk:slotPK(bprs[bp].t1,bprs[bp].t2), bal:balance(bprs[bp].t1,bprs[bp].t2)});
-  } else if(nC === 1) {
-    var wcList = combos(players, nW);
-    for(var wi = 0; wi < wcList.length; wi++) {
-      var wc = wcList[wi];
-      var wcn = {};
-      for(var wx = 0; wx < wc.length; wx++) wcn[wc[wx].name] = true;
-      var act = players.filter(function(p){ return !wcn[p.name]; });
-      var prs = allPairs(act);
-      for(var pi = 0; pi < prs.length; pi++) {
-        var t1s = prs[pi].t1, t2s = prs[pi].t2;
-        allSlots.push({waiters:wc, t1:t1s, t2:t2s, pk:slotPK(t1s,t2s), bal:balance(t1s,t2s)});
-      }
+  if(nW2 === 0) {
+    var bprs2 = allPairs(players);
+    for(var bp2=0;bp2<bprs2.length;bp2++)
+      allSlots2.push({waiters:[],wk:'',t1:bprs2[bp2].t1,t2:bprs2[bp2].t2,pk:mkPK(bprs2[bp2].t1,bprs2[bp2].t2)});
+  } else if(nC===1) {
+    var wcL=combos(players,nW2);
+    for(var wi3=0;wi3<wcL.length;wi3++){
+      var wc3=wcL[wi3],wcn3={};
+      for(var wx3=0;wx3<wc3.length;wx3++) wcn3[wc3[wx3].name]=true;
+      var act3=players.filter(function(p){return !wcn3[p.name];});
+      var prs3=allPairs(act3);
+      for(var pi3=0;pi3<prs3.length;pi3++)
+        allSlots2.push({waiters:wc3,wk:mkWK(wc3),t1:prs3[pi3].t1,t2:prs3[pi3].t2,pk:mkPK(prs3[pi3].t1,prs3[pi3].t2)});
     }
   } else {
-    var wcList2 = combos(players, nW);
-    for(var wi2 = 0; wi2 < wcList2.length; wi2++) {
-      var wc2 = wcList2[wi2]; var wcn2 = {};
-      for(var wx2 = 0; wx2 < wc2.length; wx2++) wcn2[wc2[wx2].name] = true;
-      var act2 = players.filter(function(p){ return !wcn2[p.name]; });
-      var tried3 = {};
-      var cb3 = combos(act2, 4);
-      for(var ci3 = 0; ci3 < cb3.length; ci3++) {
-        var g1 = cb3[ci3];
-        var gk = g1.map(function(p){return p.name;}).sort().join(',');
-        if(tried3[gk]) continue;
-        var g2 = act2.filter(function(p){for(var x=0;x<g1.length;x++){if(g1[x].name===p.name)return false;}return true;});
-        tried3[gk] = true;
-        var p1s = allPairs(g1), p2s = allPairs(g2);
-        for(var a3 = 0; a3 < p1s.length; a3++) for(var b3 = 0; b3 < p2s.length; b3++) {
-          var ct1 = {t1:p1s[a3].t1,t2:p1s[a3].t2,type:'court1'};
-          var ct2 = {t1:p2s[b3].t1,t2:p2s[b3].t2,type:'court2'};
-          var pk3 = slotPK(p1s[a3].t1,p1s[a3].t2)+'||'+slotPK(p2s[b3].t1,p2s[b3].t2);
-          var bl3 = balance(p1s[a3].t1,p1s[a3].t2)+balance(p2s[b3].t1,p2s[b3].t2);
-          allSlots.push({waiters:wc2, courts:[ct1,ct2], pk:pk3, bal:bl3});
+    var wcL2=combos(players,nW2);
+    for(var wi4=0;wi4<wcL2.length;wi4++){
+      var wc4=wcL2[wi4],wcn4={};
+      for(var wx4=0;wx4<wc4.length;wx4++) wcn4[wc4[wx4].name]=true;
+      var act4=players.filter(function(p){return !wcn4[p.name];});
+      var tried4={};var cb4=combos(act4,4);
+      for(var ci4=0;ci4<cb4.length;ci4++){
+        var g1b=cb4[ci4],gkb=g1b.map(function(p){return p.name;}).sort().join(',');
+        if(tried4[gkb]) continue;
+        var g2b=act4.filter(function(p){for(var x=0;x<g1b.length;x++){if(g1b[x].name===p.name)return false;}return true;});
+        tried4[gkb]=true;
+        var p1b=allPairs(g1b),p2b=allPairs(g2b);
+        for(var a4=0;a4<p1b.length;a4++) for(var b4=0;b4<p2b.length;b4++){
+          var pkC=mkPK(p1b[a4].t1,p1b[a4].t2)+'||'+mkPK(p2b[b4].t1,p2b[b4].t2);
+          allSlots2.push({waiters:wc4,wk:mkWK(wc4),courts:[{t1:p1b[a4].t1,t2:p1b[a4].t2,type:'court1'},{t1:p2b[b4].t1,t2:p2b[b4].t2,type:'court2'}],pk:pkC});
         }
       }
     }
   }
 
-  // Shuffle for randomness
-  shuffle(allSlots);
+  // Shuffle for random variety each time
+  shuffle(allSlots2);
 
-  // Backtracking to find valid sequence
-  // HARD: prev.waiter != curr.waiter AND prev.pk != curr.pk
-  function canFollow2(prev, curr) {
-    if(!prev) return true;
-    var pw = prev.waiters.map(function(p){return p.name;}).sort().join(',');
-    var cw = curr.waiters.map(function(p){return p.name;}).sort().join(',');
-    if(pw === cw) return false;
-    if(prev.pk === curr.pk) return false;
-    return true;
-  }
+  // Pure backtracking - no fallback that breaks constraints
+  var foundSeq = null;
 
-  function buildSeq(remaining, seq) {
-    if(seq.length >= nR) return seq;
+  function btSearch(seq, rem) {
+    if(foundSeq) return;
+    if(seq.length === allSlots2.length) { foundSeq = seq.slice(); return; }
     var last = seq.length ? seq[seq.length-1] : null;
-    // Count usage of each slot pair key
-    var usedPK = {};
-    for(var i = 0; i < seq.length; i++) usedPK[seq[i].pk] = (usedPK[seq[i].pk]||0)+1;
-    // Valid candidates
-    var valid = [];
-    for(var j = 0; j < remaining.length; j++) {
-      if(canFollow2(last, remaining[j])) valid.push(j);
-    }
-    if(!valid.length) {
-      // Fallback: allow pair repeat (waiter constraint still hard)
-      for(var j2 = 0; j2 < remaining.length; j2++) {
-        var pw2 = last ? last.waiters.map(function(p){return p.name;}).sort().join(',') : '';
-        var cw2 = remaining[j2].waiters.map(function(p){return p.name;}).sort().join(',');
-        if(pw2 !== cw2) valid.push(j2);
-      }
-    }
-    if(!valid.length) return null;
-    // Sort: least used pk first, then best balance
-    valid.sort(function(a,b){
-      var ua = usedPK[remaining[a].pk]||0;
-      var ub = usedPK[remaining[b].pk]||0;
-      if(ua !== ub) return ua-ub;
-      return remaining[a].bal - remaining[b].bal;
-    });
-    // Try top candidates
-    var topK = Math.min(4, valid.length);
-    for(var k = 0; k < topK; k++) {
-      var idx = valid[k];
-      var chosen = remaining[idx];
-      var newRem = remaining.slice(0,idx).concat(remaining.slice(idx+1));
-      seq.push(chosen);
-      var res = buildSeq(newRem, seq);
-      if(res) return res;
+    for(var i=0;i<rem.length;i++){
+      var s=rem[i];
+      // HARD constraints
+      if(last && (last.wk===s.wk || last.pk===s.pk)) continue;
+      seq.push(s);
+      var newRem=rem.slice(0,i).concat(rem.slice(i+1));
+      btSearch(seq, newRem);
       seq.pop();
-    }
-    // If backtracking failed, just pick first valid (greedy fallback)
-    var idx2 = valid[0];
-    seq.push(remaining[idx2]);
-    return seq;
-  }
-
-  // Try multiple times with different shuffles
-  var finalSeq = null;
-  for(var attempt = 0; attempt < 15; attempt++) {
-    shuffle(allSlots);
-    var seq2 = buildSeq(allSlots.slice(), []);
-    if(seq2) {
-      // Check quality
-      var hasBadConsec = false;
-      for(var ci4 = 1; ci4 < seq2.length; ci4++) {
-        var pw3 = seq2[ci4-1].waiters.map(function(p){return p.name;}).sort().join(',');
-        var cw3 = seq2[ci4].waiters.map(function(p){return p.name;}).sort().join(',');
-        if(pw3 === cw3 || seq2[ci4-1].pk === seq2[ci4].pk) { hasBadConsec=true; break; }
-      }
-      if(!hasBadConsec) { finalSeq = seq2; break; }
-      if(!finalSeq) finalSeq = seq2; // keep best so far
+      if(foundSeq) return;
     }
   }
-  if(!finalSeq) finalSeq = allSlots;
 
-  // Build rounds
+  // Try from different starting points
+  for(var startIdx=0; startIdx<allSlots2.length && !foundSeq; startIdx++) {
+    var startSlot=allSlots2[startIdx];
+    var restSlots=allSlots2.slice(0,startIdx).concat(allSlots2.slice(startIdx+1));
+    btSearch([startSlot], restSlots);
+  }
+
+  // If not found (shouldn't happen for 5 players), use greedy
+  if(!foundSeq) {
+    foundSeq=[];
+    var remG=allSlots2.slice();
+    while(foundSeq.length<allSlots2.length){
+      var lastG=foundSeq.length?foundSeq[foundSeq.length-1]:null;
+      var validG=remG.filter(function(s){return !lastG||(lastG.wk!==s.wk&&lastG.pk!==s.pk);});
+      if(!validG.length) validG=remG.filter(function(s){return !lastG||lastG.wk!==s.wk;});
+      if(!validG.length) validG=remG;
+      foundSeq.push(validG[0]);
+      remG.splice(remG.indexOf(validG[0]),1);
+    }
+  }
+
+  // Build rounds (cycle if nR > slots)
   rounds = [];
-  for(var ri3 = 0; ri3 < nR; ri3++) {
-    var slot2 = finalSeq[ri3 % finalSeq.length];
-    var courts2 = slot2.courts || [{t1:slot2.t1, t2:slot2.t2, type:'main'}];
-    rounds.push({courts:courts2, waiting:slot2.waiters, score:{}, status:'pending'});
+  for(var ri4=0;ri4<nR;ri4++){
+    var slot3=foundSeq[ri4%foundSeq.length];
+    var courts3=slot3.courts||[{t1:slot3.t1,t2:slot3.t2,type:'main'}];
+    rounds.push({courts:courts3,waiting:slot3.waiters,score:{},status:'pending'});
   }
+
 
   renderRounds();
   showTab('rounds');
