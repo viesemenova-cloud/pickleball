@@ -840,8 +840,11 @@ function cHtml(r,ri,ci) {
   if(r.status==='done'){
     var sc=r.score&&r.score[ci];
     if(sc){
-      var win=sc[0]>sc[1]?c.t1.map(function(p){return p.name;}).join(' & '):c.t2.map(function(p){return p.name;}).join(' & ');
-      h+='<div class="sdone">'+sc[0]+' : '+sc[1]+'</div><div class="swinner">🏆 '+win+'</div>';
+      h+='<div class="sdone">'+sc[0]+' : '+sc[1]+'</div>';
+      if(sc[0]>sc[1]){ h+='<div class="swinner">🏆 '+c.t1.map(function(p){return p.name;}).join(' & ')+'</div>'; }
+      else if(sc[1]>sc[0]){ h+='<div class="swinner">🏆 '+c.t2.map(function(p){return p.name;}).join(' & ')+'</div>'; }
+      else if(sc[0]===0&&sc[1]===0){ h+='<div style="font-size:.73rem;color:var(--tx2);margin-top:2px">Счёт не введён</div>'; }
+      else{ h+='<div style="font-size:.73rem;color:var(--tx2);margin-top:2px">Ничья</div>'; }
     }
     h+='<div class="sr">';
     h+='<input class="sinp" type="number" min="0" max="99" placeholder="0" value="'+s0+'" id="sc'+ri+'x'+ci+'a" style="opacity:.6">';
@@ -1034,7 +1037,9 @@ function renderTable(){
     var r=rounds[ri];if(r.status!=='done') continue;
     for(var ci=0;ci<r.courts.length;ci++){
       var sc=r.score&&r.score[ci];if(!sc) continue;
-      var s0=sc[0],s1=sc[1],w1=s0>s1,t1=r.courts[ci].t1,t2=r.courts[ci].t2;
+      var s0=sc[0],s1=sc[1];
+      if(s0===0&&s1===0) continue; // skip unscored courts
+      var w1=s0>s1,t1=r.courts[ci].t1,t2=r.courts[ci].t2;
       for(var i=0;i<t1.length;i++){var nm=t1[i].name;if(!stats[nm])stats[nm]={name:nm,level:t1[i].level,games:0,wins:0,pf:0,pa:0};stats[nm].games++;if(w1)stats[nm].wins++;stats[nm].pf+=s0;stats[nm].pa+=s1;}
       for(var j=0;j<t2.length;j++){var nm2=t2[j].name;if(!stats[nm2])stats[nm2]={name:nm2,level:t2[j].level,games:0,wins:0,pf:0,pa:0};stats[nm2].games++;if(!w1)stats[nm2].wins++;stats[nm2].pf+=s1;stats[nm2].pa+=s0;}
       var teams=[[t1,w1],[t2,!w1]];
@@ -1285,7 +1290,9 @@ function buildStats() {
     var r=rounds[ri];if(r.status!=='done') continue;
     for(var ci=0;ci<r.courts.length;ci++){
       var sc=r.score&&r.score[ci];if(!sc) continue;
-      var s0=sc[0],s1=sc[1],w1=s0>s1,t1=r.courts[ci].t1,t2=r.courts[ci].t2;
+      var s0=sc[0],s1=sc[1];
+      if(s0===0&&s1===0) continue;
+      var w1=s0>s1,t1=r.courts[ci].t1,t2=r.courts[ci].t2;
       for(var i=0;i<t1.length;i++){var nm=t1[i].name;if(!stats[nm])stats[nm]={name:nm,level:t1[i].level,games:0,wins:0,pf:0,pa:0};stats[nm].games++;if(w1)stats[nm].wins++;stats[nm].pf+=s0;stats[nm].pa+=s1;}
       for(var j=0;j<t2.length;j++){var nm2=t2[j].name;if(!stats[nm2])stats[nm2]={name:nm2,level:t2[j].level,games:0,wins:0,pf:0,pa:0};stats[nm2].games++;if(!w1)stats[nm2].wins++;stats[nm2].pf+=s1;stats[nm2].pa+=s0;}
       var teams=[[t1,w1],[t2,!w1]];
