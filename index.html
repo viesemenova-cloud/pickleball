@@ -984,6 +984,7 @@ function rHtml(r,i) {
   h+='<div class="ra">';
   if(r.status==='pending'){
     h+='<button class="btn by bsm" data-a="start" data-i="'+i+'">▶ Начать</button>';
+    h+='<button class="btn bdanger bsm" data-a="delround" data-i="'+i+'" title="Удалить раунд">🗑</button>';
   }
   if(r.status==='playing') h+='<button class="btn bg bsm" data-a="fin" data-i="'+i+'">✓ Завершить</button>';
   if(r.status==='done') h+='<button class="btn bgh bsm" data-a="reopen" data-i="'+i+'" title="Переиграть">↩</button>';
@@ -1173,17 +1174,28 @@ function renderEB(){
     for(var wi=0;wi<waiting.length;wi++){
       h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">';
       h+='<select style="flex:1" data-ci="wait" data-tm="wait" data-si="'+wi+'">';
-      h+='<option value="__del__">— удалить из раунда —</option>';
       for(var wpi=0;wpi<all.length;wpi++){
         var wsel=(waiting[wi]&&waiting[wi].name===all[wpi].name)?' selected':'';
         h+='<option value="'+wpi+'"'+wsel+'>'+all[wpi].name+' ('+all[wpi].level+')</option>';
       }
       h+='</select>';
+      h+='<button class="btn bdanger bsm" data-delwait="'+wi+'" style="flex-shrink:0;padding:5px 8px">✕</button>';
       h+='</div>';
     }
     h+='</div>';
   }
   document.getElementById('ebody').innerHTML=h;
+  // Bind delete waiter buttons
+  var delBtns=document.getElementById('ebody').querySelectorAll('[data-delwait]');
+  for(var di=0;di<delBtns.length;di++){
+    (function(btn){
+      btn.addEventListener('click',function(){
+        var idx=parseInt(btn.getAttribute('data-delwait'));
+        editState.waiting.splice(idx,1);
+        renderEB();
+      });
+    })(delBtns[di]);
+  }
 }
 function applyEdit(){
   if(!editState) return;
@@ -1195,8 +1207,7 @@ function applyEdit(){
     var tm=s.getAttribute('data-tm');
     var si=parseInt(s.getAttribute('data-si'));
     if(ci==='wait'){
-      if(s.value==='__del__') waiting[si]=null;
-      else waiting[si]=all[parseInt(s.value)];
+      waiting[si]=all[parseInt(s.value)];
     } else {
       courts[parseInt(ci)][tm][si]=all[parseInt(s.value)];
     }
