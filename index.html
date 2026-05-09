@@ -233,7 +233,7 @@ table{font-size:.82rem}
     <div class="pane" id="pane-rounds">
       <div id="rlist"><div class="empty">Сначала добавьте игроков и нажмите «Сгенерировать»</div></div>
       <div id="rounds-actions" style="display:none;gap:10px;flex-wrap:wrap;margin-top:4px" class="fx">
-        <button class="btn bgh" onclick="addManualRound()">+ Добавить раунд вручную</button>
+        <button class="btn bgh" id="btn-addmanual" onclick="addManualRound()">+ Добавить раунд</button>
         <button class="btn bbl" id="btn-redistribute" style="display:none" onclick="redistributeRemaining()">🔄 Перераспределить оставшиеся</button>
       </div>
     </div>
@@ -736,15 +736,24 @@ function regenerate() {
 
 function updateRoundsActions() {
   var panel = document.getElementById('rounds-actions');
+  var btnAdd = document.getElementById('btn-addmanual');
   var btnRedist = document.getElementById('btn-redistribute');
   if(!rounds.length){ if(panel) panel.style.display='none'; return; }
   if(panel) panel.style.display='flex';
-  // Show redistribute if any round is done or manual
-  var hasProgress = false;
+
+  // Count pending non-manual rounds
+  var pendingCount=0;
+  var doneCount=0;
   for(var i=0;i<rounds.length;i++){
-    if(rounds[i].status==='done'||rounds[i].manual) { hasProgress=true; break; }
+    if(rounds[i].status==='pending'&&!rounds[i].manual) pendingCount++;
+    if(rounds[i].status==='done') doneCount++;
   }
-  if(btnRedist) btnRedist.style.display = hasProgress ? '' : 'none';
+
+  // Show "+" only when no more pending non-manual rounds (all played or manual)
+  if(btnAdd) btnAdd.style.display = (pendingCount===0) ? '' : 'none';
+
+  // Show redistribute only when there are pending non-manual rounds
+  if(btnRedist) btnRedist.style.display = (pendingCount>0 && doneCount>0) ? '' : 'none';
 }
 
 function addManualRound() {
@@ -788,7 +797,7 @@ function redistributeRemaining() {
   }
 
   if(pendingNonManual === 0){
-    alert('Нет pending раундов для перераспределения. Используй "+ Добавить раунд вручную" чтобы добавить новые.');
+    alert('Нет незаигранных раундов для перераспределения.');
     return;
   }
 
@@ -994,7 +1003,11 @@ function rHtml(r,i) {
   h+='</div>';
   if(r.waiting&&r.waiting.length){
     h+='<div class="wr"><span class="wl">⏳ Ожидают</span>';
-    for(var wi=0;wi<r.waiting.length;wi++) h+='<span class="wc">'+r.waiting[wi].name+' '+sbdg(r.waiting[wi].level)+'</span>';
+    for(var wi=0;wi<r.waiting.length;wi++){
+      h+='<span class="wc" style="gap:6px">'+r.waiting[wi].name+' '+sbdg(r.waiting[wi].level);
+      h+='<button style="background:none;border:none;color:var(--tx2);cursor:pointer;font-size:.8rem;padding:0;line-height:1" data-a="delwaiter" data-i="'+i+'" data-wi="'+wi+'">✕</button>';
+      h+='</span>';
+    }
     h+='</div>';
   }
   h+='</div></div>';
@@ -1059,9 +1072,19 @@ function bindRounds() {
         var a=btn.getAttribute('data-a'),idx=parseInt(btn.getAttribute('data-i'));
         if(a==='start') startR(idx);
         else if(a==='fin') finR(idx);
-        else if(a==='shuf') reshuf(idx);
         else if(a==='edit') openEdit(idx);
         else if(a==='reopen'){rounds[idx].status='playing';renderRounds();}
+        else if(a==='delround'){
+          rounds.splice(idx,1);
+          renderRounds();
+          autoSave();
+        }
+        else if(a==='delwaiter'){
+          var wi2=parseInt(btn.getAttribute('data-wi'));
+          rounds[idx].waiting.splice(wi2,1);
+          renderRounds();
+          autoSave();
+        }
         else if(a==='fixscore'){var rif=parseInt(btn.getAttribute('data-ri'));var cif=parseInt(btn.getAttribute('data-ci'));saveScore(rif,cif);renderRounds();saveToHistory(true);}
       });
     })(btns[i]);
@@ -1214,7 +1237,20 @@ function applyEdit(){
   }
   rounds[editState.ri].courts=courts;
   rounds[editState.ri].waiting=waiting.filter(function(w){return w!==null;});
-  closeEdit(); renderRounds(); autoSave();
+  var ri_saved = editState.ri;
+  closeEdit();
+  renderRounds();
+  autoSave();
+  // Check if there are pending non-manual rounds after this one
+  var hasPending=false;
+  for(var px=ri_saved+1;px<rounds.length;px++){
+    if(rounds[px].status==='pending'&&!rounds[px].manual){hasPending=true;break;}
+  }
+  if(hasPending){
+    if(confirm('Перераспределить оставшиеся раунды с учётом этого изменения?')){
+      redistributeRemaining();
+    }
+  }
 }
 function renderEditHint(ri) {
   // Build pair count from played rounds up to ri
