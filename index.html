@@ -1142,7 +1142,6 @@ function renderEB(){
   h+='<div style="padding-top:11px;border-top:1px solid var(--br)">';
   h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
   h+='<div style="font-size:.68rem;color:var(--tx2);font-weight:600">⏳ ОЖИДАЮТ</div>';
-  // FIX: Add waiter button
   h+='<button class="btn bgh bsm" id="btn-addwaiter" style="font-size:.68rem;padding:3px 8px">+ Добавить</button>';
   h+='</div>';
   if(waiting.length){
@@ -1154,7 +1153,7 @@ function renderEB(){
         h+='<option value="'+wpi+'"'+wsel+'>'+all[wpi].name+' ('+all[wpi].level+')</option>';
       }
       h+='</select>';
-      h+='<button class="btn bdanger bsm" data-delwait="'+wi+'" style="flex-shrink:0;padding:5px 8px">✕</button>';
+      // No delete button here — waiters are removed via the round view (✕ chip)
       h+='</div>';
     }
   } else {
@@ -1164,28 +1163,30 @@ function renderEB(){
 
   document.getElementById('ebody').innerHTML=h;
 
-  // Bind add waiter button
+  // Bind add waiter button — only adds players NOT already on court or waiting
   var addWaiterBtn=document.getElementById('btn-addwaiter');
   if(addWaiterBtn){
     addWaiterBtn.addEventListener('click',function(){
-      // Add first player from all list as default waiter
-      if(editState.all.length>0){
-        editState.waiting.push(editState.all[0]);
-        renderEB();
+      // Collect names currently on courts
+      var usedNames={};
+      for(var ci2=0;ci2<editState.courts.length;ci2++){
+        for(var ti=0;ti<editState.courts[ci2].t1.length;ti++) usedNames[editState.courts[ci2].t1[ti].name]=true;
+        for(var ti2=0;ti2<editState.courts[ci2].t2.length;ti2++) usedNames[editState.courts[ci2].t2[ti2].name]=true;
       }
+      // Also mark current waiters as used
+      for(var wi2=0;wi2<editState.waiting.length;wi2++) usedNames[editState.waiting[wi2].name]=true;
+      // Find first player not used
+      var candidate=null;
+      for(var pi3=0;pi3<players.length;pi3++){
+        if(!usedNames[players[pi3].name]){ candidate=players[pi3]; break; }
+      }
+      if(!candidate){
+        alert('Все игроки уже распределены по корту или ожидают');
+        return;
+      }
+      editState.waiting.push(candidate);
+      renderEB();
     });
-  }
-
-  // Bind delete waiter buttons
-  var delBtns=document.getElementById('ebody').querySelectorAll('[data-delwait]');
-  for(var di=0;di<delBtns.length;di++){
-    (function(btn){
-      btn.addEventListener('click',function(){
-        var idx=parseInt(btn.getAttribute('data-delwait'));
-        editState.waiting.splice(idx,1);
-        renderEB();
-      });
-    })(delBtns[di]);
   }
 }
 
