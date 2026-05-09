@@ -232,6 +232,10 @@ table{font-size:.82rem}
     <!-- ROUNDS -->
     <div class="pane" id="pane-rounds">
       <div id="rlist"><div class="empty">Сначала добавьте игроков и нажмите «Сгенерировать»</div></div>
+      <div id="rounds-actions" style="display:none;gap:10px;flex-wrap:wrap;margin-top:4px" class="fx">
+        <button class="btn bgh" onclick="addManualRound()">+ Добавить раунд вручную</button>
+        <button class="btn bbl" id="btn-redistribute" style="display:none" onclick="redistributeRemaining()">🔄 Перераспределить оставшиеся</button>
+      </div>
     </div>
 
     <!-- TABLE -->
@@ -718,6 +722,7 @@ function generate() {
   showTab('rounds');
   autoSave();
   saveToHistory(true);
+  updateRoundsActions();
   var rb=document.getElementById('regen-btn');
   if(rb) rb.style.display='';
 }
@@ -727,6 +732,167 @@ function regenerate() {
   if(rounds.length&&!confirm('Перегенерировать все раунды? Текущее распределение будет заменено.')) return;
   rounds=[];
   generate();
+}
+
+function updateRoundsActions() {
+  var panel = document.getElementById('rounds-actions');
+  var btnRedist = document.getElementById('btn-redistribute');
+  if(!rounds.length){ if(panel) panel.style.display='none'; return; }
+  if(panel) panel.style.display='flex';
+  // Show redistribute if any round is done or manual
+  var hasProgress = false;
+  for(var i=0;i<rounds.length;i++){
+    if(rounds[i].status==='done'||rounds[i].manual) { hasProgress=true; break; }
+  }
+  if(btnRedist) btnRedist.style.display = hasProgress ? '' : 'none';
+}
+
+function addManualRound() {
+  // Build empty round with first 4 players as default
+  var n = players.length;
+  if(n < 4){ alert('Нужно минимум 4 игрока'); return; }
+  var nCourts = n >= 8 ? 2 : 1;
+  var nActive = nCourts * 4;
+  var defaultPlayers = players.slice(0, nActive);
+  var waiters = players.slice(nActive);
+  var courts;
+  if(nCourts === 1){
+    courts = [{t1:[defaultPlayers[0],defaultPlayers[1]],t2:[defaultPlayers[2],defaultPlayers[3]],type:'main'}];
+  } else {
+    courts = [
+      {t1:[defaultPlayers[0],defaultPlayers[1]],t2:[defaultPlayers[2],defaultPlayers[3]],type:'court1'},
+      {t1:[defaultPlayers[4],defaultPlayers[5]],t2:[defaultPlayers[6],defaultPlayers[7]],type:'court2'}
+    ];
+  }
+  rounds.push({courts:courts, waiting:waiters, score:{}, status:'pending', manual:true});
+  renderRounds();
+  autoSave();
+  // Open edit modal for the new round immediately
+  openEdit(rounds.length-1);
+}
+
+function redistributeRemaining() {
+  if(!players.length){ alert('Нет игроков'); return; }
+  // Find first pending non-manual round index
+  var firstPending = -1;
+  for(var i=0;i<rounds.length;i++){
+    if(rounds[i].status==='pending' && !rounds[i].manual){ firstPending=i; break; }
+  }
+  if(firstPending === -1){
+    // All done or manual - ask if they want to add more
+    if(!confirm('Все раунды завершены или заданы вручную. Добавить ещё раундов?')) return;
+    var nMore = parseInt(prompt('Сколько раундов добавить?','5'));
+    if(!nMore || nMore < 1) return;
+    generateFromRound(rounds.length, nMore);
+  } else {
+    // Remove all pending non-manual rounds from firstPending onwards
+    var kept = rounds.slice(0, firstPending);
+    var nToGen = rounds.length - firstPending;
+    // Count manual pending rounds after firstPending
+    var manualAfter = 0;
+    for(var j=firstPending;j<rounds.length;j++){
+      if(rounds[j].manual) manualAfter++;
+    }
+    rounds = kept;
+    generateFromRound(firstPending, nToGen - manualAfter);
+  }
+}
+
+function generateFromRound(startIdx, nToGen) {
+  if(nToGen <= 0){ renderRounds(); return; }
+  var nCourts2 = players.length >= 8 ? 2 : 1;
+  var nActive2 = nCourts2 * 4;
+  var nWait2 = Math.max(0, players.length - nActive2);
+
+  // Build history from already-played rounds
+  var tmHistory3 = [];
+  var wCounts3 = {};
+  for(var pi=0;pi<players.length;pi++) wCounts3[players[pi].name]=0;
+  var lastWS3 = {};
+
+  for(var ri=0;ri<rounds.length;ri++){
+    var r=rounds[ri];
+    // Update wait counts
+    for(var wi=0;wi<r.waiting.length;wi++) wCounts3[r.waiting[wi].name]=(wCounts3[r.waiting[wi].name]||0)+1;
+    // Update last waiters (only from last round)
+    if(ri===rounds.length-1){
+      lastWS3={};
+      for(var wi2=0;wi2<r.waiting.length;wi2++) lastWS3[r.waiting[wi2].name]=true;
+    }
+    // Update tm history
+    var tm3=getTM2(r.courts);
+    tmHistory3.unshift(tm3);
+    if(tmHistory3.length>15) tmHistory3.pop();
+  }
+
+  // Generate new rounds
+  var allWC3 = nWait2>0?combos(players,nWait2):[[]];
+  shuffle(allWC3);
+
+  for(var r3=0;r3<nToGen;r3++){
+    var waiters3, active3, courts3;
+    if(nWait2<=0){
+      waiters3=[];
+    } else {
+      var scored3=[];
+      var totalR = rounds.length + r3;
+      for(var wi3=0;wi3<allWC3.length;wi3++){
+        var wc3=allWC3[wi3];
+        var blk=false;
+        for(var bx=0;bx<wc3.length;bx++){if(lastWS3[wc3[bx].name]){blk=true;break;}}
+        if(blk) continue;
+        var tgt=(totalR+1)*nWait2/players.length;
+        var sc3=0;
+        for(var sx=0;sx<wc3.length;sx++) sc3+=(tgt-wCounts3[wc3[sx].name]);
+        scored3.push({score:-sc3,wc:wc3});
+      }
+      if(!scored3){
+        for(var wi4=0;wi4<allWC3.length;wi4++){
+          var tgt2=(totalR+1)*nWait2/players.length;
+          var sc4=0;
+          for(var sx2=0;sx2<allWC3[wi4].length;sx2++) sc4+=(tgt2-wCounts3[allWC3[wi4][sx2].name]);
+          scored3.push({score:-sc4,wc:allWC3[wi4]});
+        }
+      }
+      scored3.sort(function(a,b){return a.score-b.score;});
+      var topSc3=scored3[0].score;
+      var topGrp3=scored3.filter(function(x){return x.score<=topSc3+0.01;});
+      var chosen3=topGrp3[Math.floor(Math.random()*Math.min(3,topGrp3.length))].wc;
+      waiters3=chosen3;
+      for(var wx3=0;wx3<chosen3.length;wx3++) wCounts3[chosen3[wx3].name]=(wCounts3[chosen3[wx3].name]||0)+1;
+      lastWS3={};
+      for(var lx3=0;lx3<chosen3.length;lx3++) lastWS3[chosen3[lx3].name]=true;
+    }
+
+    var wn3={};
+    for(var wx4=0;wx4<waiters3.length;wx4++) wn3[waiters3[wx4].name]=true;
+    active3=players.filter(function(p){return !wn3[p.name];});
+
+    if(nCourts2===1) courts3=bestCourts1x(active3,tmHistory3);
+    else             courts3=bestCourts2x(active3,tmHistory3);
+
+    var tm4=getTM2(courts3);
+    tmHistory3.unshift(tm4);
+    if(tmHistory3.length>15) tmHistory3.pop();
+
+    rounds.push({courts:courts3, waiting:waiters3, score:{}, status:'pending'});
+  }
+
+  renderRounds();
+  autoSave();
+  saveToHistory(true);
+}
+
+// Helper - same as getTM but accessible here
+function getTM2(courts) {
+  var s={};
+  for(var ci=0;ci<courts.length;ci++){
+    var t1n=courts[ci].t1.map(function(p){return p.name;}).sort();
+    var t2n=courts[ci].t2.map(function(p){return p.name;}).sort();
+    for(var a=0;a<t1n.length;a++) for(var b=a+1;b<t1n.length;b++) s[t1n[a]+'&'+t1n[b]]=true;
+    for(var a2=0;a2<t2n.length;a2++) for(var b2=a2+1;b2<t2n.length;b2++) s[t2n[a2]+'&'+t2n[b2]]=true;
+  }
+  return s;
 }
 
 function newSession() {
@@ -798,10 +964,12 @@ function renderRounds() {
   for(var i=0;i<rounds.length;i++) h+=rHtml(rounds[i],i);
   el.innerHTML=h;
   bindRounds();
+  updateRoundsActions();
 }
 
 function rHtml(r,i) {
   var sl=r.status==='playing'?'Играет':r.status==='done'?'Завершён':'Ожидает';
+  var manualBadge=r.manual?'<span style="font-size:.65rem;background:rgba(91,141,238,.2);color:var(--bl);padding:2px 6px;border-radius:8px;margin-left:4px">✍️ вручную</span>':'';
   var sc='rs'+(r.status==='playing'?'g':r.status==='done'?'d':'p');
   var h='<div class="rc" id="rc-'+i+'">';
   h+='<div class="rh"><span class="rn">Раунд '+(i+1)+'</span><span class="'+sc+'">'+sl+'</span>';
@@ -968,6 +1136,7 @@ function openEdit(ri){
   var courts=[];for(var ci2=0;ci2<r.courts.length;ci2++) courts.push({type:r.courts[ci2].type,t1:r.courts[ci2].t1.slice(),t2:r.courts[ci2].t2.slice()});
   editState={ri:ri,all:all,courts:courts,waiting:r.waiting.slice()};
   renderEB();
+  renderEditHint(ri);
   document.getElementById('emodal').className='mo on';
 }
 function renderEB(){
@@ -993,14 +1162,17 @@ function renderEB(){
   }
   if(waiting.length){
     h+='<div style="padding-top:11px;border-top:1px solid var(--br)">';
-    h+='<div style="font-size:.68rem;color:var(--tx2);margin-bottom:8px;font-weight:600">ОЖИДАЮТ (можно поменять)</div>';
+    h+='<div style="font-size:.68rem;color:var(--tx2);margin-bottom:8px;font-weight:600">ОЖИДАЮТ</div>';
     for(var wi=0;wi<waiting.length;wi++){
-      h+='<select style="width:100%;margin-bottom:6px" data-ci="wait" data-tm="wait" data-si="'+wi+'">';
+      h+='<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">';
+      h+='<select style="flex:1" data-ci="wait" data-tm="wait" data-si="'+wi+'">';
+      h+='<option value="__del__">— удалить из раунда —</option>';
       for(var wpi=0;wpi<all.length;wpi++){
         var wsel=(waiting[wi]&&waiting[wi].name===all[wpi].name)?' selected':'';
         h+='<option value="'+wpi+'"'+wsel+'>'+all[wpi].name+' ('+all[wpi].level+')</option>';
       }
       h+='</select>';
+      h+='</div>';
     }
     h+='</div>';
   }
@@ -1016,15 +1188,63 @@ function applyEdit(){
     var tm=s.getAttribute('data-tm');
     var si=parseInt(s.getAttribute('data-si'));
     if(ci==='wait'){
-      waiting[si]=all[parseInt(s.value)];
+      if(s.value==='__del__') waiting[si]=null;
+      else waiting[si]=all[parseInt(s.value)];
     } else {
       courts[parseInt(ci)][tm][si]=all[parseInt(s.value)];
     }
   }
   rounds[editState.ri].courts=courts;
-  rounds[editState.ri].waiting=waiting;
+  rounds[editState.ri].waiting=waiting.filter(function(w){return w!==null;});
   closeEdit(); renderRounds(); autoSave();
 }
+function renderEditHint(ri) {
+  // Build pair count from played rounds up to ri
+  var pairCount={};
+  var waitCnt={};
+  for(var pi=0;pi<players.length;pi++){ pairCount[players[pi].name]={};waitCnt[players[pi].name]=0; }
+  for(var i=0;i<ri;i++){
+    var r=rounds[i];
+    for(var wi=0;wi<r.waiting.length;wi++) waitCnt[r.waiting[wi].name]=(waitCnt[r.waiting[wi].name]||0)+1;
+    for(var ci=0;ci<r.courts.length;ci++){
+      var all4=r.courts[ci].t1.concat(r.courts[ci].t2);
+      for(var a=0;a<all4.length;a++) for(var b=0;b<all4.length;b++){
+        if(a===b) continue;
+        var na=all4[a].name,nb=all4[b].name;
+        if(!pairCount[na]) pairCount[na]={};
+        pairCount[na][nb]=(pairCount[na][nb]||0)+1;
+      }
+    }
+  }
+  var h='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--br)">';
+  h+='<div style="font-size:.68rem;color:var(--tx2);margin-bottom:8px;font-weight:600">📊 ПОДСКАЗКА — сыграно вместе (раунды 1-'+ri+')</div>';
+  h+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.72rem">';
+  h+='<tr><th style="padding:4px 6px;background:var(--s2);text-align:left">Игрок</th>';
+  for(var pi2=0;pi2<players.length;pi2++) h+='<th style="padding:4px 6px;background:var(--s2);text-align:center">'+players[pi2].name.slice(0,4)+'</th>';
+  h+='<th style="padding:4px 6px;background:var(--s2);text-align:center;color:var(--ac)">Ждал</th></tr>';
+  for(var pi3=0;pi3<players.length;pi3++){
+    var p=players[pi3];
+    h+='<tr><td style="padding:4px 6px;font-weight:500">'+p.name+'</td>';
+    for(var pi4=0;pi4<players.length;pi4++){
+      var other=players[pi4];
+      if(p.name===other.name){ h+='<td style="padding:4px 6px;text-align:center;color:var(--br)">—</td>'; }
+      else {
+        var cnt=(pairCount[p.name]&&pairCount[p.name][other.name])||0;
+        var col=cnt===0?'var(--g)':cnt===1?'var(--tx)':cnt===2?'var(--ac)':'var(--r)';
+        h+='<td style="padding:4px 6px;text-align:center;color:'+col+';font-weight:600">'+cnt+'</td>';
+      }
+    }
+    h+='<td style="padding:4px 6px;text-align:center;color:var(--ac)">'+( waitCnt[p.name]||0)+'</td>';
+    h+='</tr>';
+  }
+  h+='</table></div>';
+  h+='<div style="font-size:.66rem;color:var(--tx2);margin-top:5px">🟢=0 раз · ⚪=1 · 🟡=2 · 🔴=3+</div>';
+  h+='</div>';
+  // Append to modal body
+  var eb=document.getElementById('ebody');
+  if(eb) eb.innerHTML+=h;
+}
+
 function closeEdit(){document.getElementById('emodal').className='mo';editState=null;}
 
 // ============================================================
