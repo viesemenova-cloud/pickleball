@@ -773,29 +773,32 @@ function addManualRound() {
 
 function redistributeRemaining() {
   if(!players.length){ alert('Нет игроков'); return; }
-  // Find first pending non-manual round index
-  var firstPending = -1;
+
+  // Count pending non-manual rounds
+  var pendingNonManual = 0;
   for(var i=0;i<rounds.length;i++){
-    if(rounds[i].status==='pending' && !rounds[i].manual){ firstPending=i; break; }
+    if(rounds[i].status==='pending' && !rounds[i].manual) pendingNonManual++;
   }
-  if(firstPending === -1){
-    // All done or manual - ask if they want to add more
-    if(!confirm('Все раунды завершены или заданы вручную. Добавить ещё раундов?')) return;
-    var nMore = parseInt(prompt('Сколько раундов добавить?','5'));
-    if(!nMore || nMore < 1) return;
-    generateFromRound(rounds.length, nMore);
-  } else {
-    // Remove all pending non-manual rounds from firstPending onwards
-    var kept = rounds.slice(0, firstPending);
-    var nToGen = rounds.length - firstPending;
-    // Count manual pending rounds after firstPending
-    var manualAfter = 0;
-    for(var j=firstPending;j<rounds.length;j++){
-      if(rounds[j].manual) manualAfter++;
+
+  if(pendingNonManual === 0){
+    alert('Нет pending раундов для перераспределения. Используй "+ Добавить раунд вручную" чтобы добавить новые.');
+    return;
+  }
+
+  if(!confirm('Перераспределить ' + pendingNonManual + ' незаигранных раундов с учётом истории?')) return;
+
+  // Keep only non-pending or manual rounds, remember count of pending to regenerate
+  var kept = [];
+  var nToGen = 0;
+  for(var j=0;j<rounds.length;j++){
+    if(rounds[j].status==='pending' && !rounds[j].manual){
+      nToGen++;
+    } else {
+      kept.push(rounds[j]);
     }
-    rounds = kept;
-    generateFromRound(firstPending, nToGen - manualAfter);
   }
+  rounds = kept;
+  generateFromRound(rounds.length, nToGen);
 }
 
 function generateFromRound(startIdx, nToGen) {
