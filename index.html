@@ -748,7 +748,6 @@ function updateRoundsActions() {
 }
 
 function addManualRound() {
-  // Build empty round with first 4 players as default
   var n = players.length;
   if(n < 4){ alert('Нужно минимум 4 игрока'); return; }
   var nCourts = n >= 8 ? 2 : 1;
@@ -764,11 +763,19 @@ function addManualRound() {
       {t1:[defaultPlayers[4],defaultPlayers[5]],t2:[defaultPlayers[6],defaultPlayers[7]],type:'court2'}
     ];
   }
-  rounds.push({courts:courts, waiting:waiters, score:{}, status:'pending', manual:true});
+  // Insert after last done/playing round (before first pending)
+  var insertAt = rounds.length;
+  for(var i=0;i<rounds.length;i++){
+    if(rounds[i].status==='pending'){
+      insertAt = i;
+      break;
+    }
+  }
+  var newRound = {courts:courts, waiting:waiters, score:{}, status:'pending', manual:true};
+  rounds.splice(insertAt, 0, newRound);
   renderRounds();
   autoSave();
-  // Open edit modal for the new round immediately
-  openEdit(rounds.length-1);
+  openEdit(insertAt);
 }
 
 function redistributeRemaining() {
@@ -784,8 +791,6 @@ function redistributeRemaining() {
     alert('Нет pending раундов для перераспределения. Используй "+ Добавить раунд вручную" чтобы добавить новые.');
     return;
   }
-
-  if(!confirm('Перераспределить ' + pendingNonManual + ' незаигранных раундов с учётом истории?')) return;
 
   // Keep only non-pending or manual rounds, remember count of pending to regenerate
   var kept = [];
@@ -979,7 +984,6 @@ function rHtml(r,i) {
   h+='<div class="ra">';
   if(r.status==='pending'){
     h+='<button class="btn by bsm" data-a="start" data-i="'+i+'">▶ Начать</button>';
-    h+='<button class="btn bgh bsm" data-a="shuf" data-i="'+i+'" title="Перетасовать">🎲</button>';
   }
   if(r.status==='playing') h+='<button class="btn bg bsm" data-a="fin" data-i="'+i+'">✓ Завершить</button>';
   if(r.status==='done') h+='<button class="btn bgh bsm" data-a="reopen" data-i="'+i+'" title="Переиграть">↩</button>';
