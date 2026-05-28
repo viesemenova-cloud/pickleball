@@ -101,7 +101,7 @@ select option{background:var(--s2)}
 .dr{display:flex;gap:7px;align-items:center}
 .dr input{flex:1}
 .tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
 th{background:var(--s2);padding:8px 10px;text-align:left;font-size:.69rem;letter-spacing:1px;color:var(--tx2);font-weight:600;text-transform:uppercase;white-space:nowrap}
 td{padding:8px 10px;border-bottom:1px solid var(--br);font-size:.84rem}
 tr:last-child td{border-bottom:none}
@@ -142,7 +142,6 @@ tr:hover td{background:var(--s2)}
 .chip:hover{border-color:var(--ac)}
 @media(max-width:530px){.twoc{grid-template-columns:1fr}}
 @media(max-width:600px){.hide-xs{display:none}}
-table{font-size:.82rem}
 </style>
 </head>
 <body>
@@ -1748,10 +1747,6 @@ function showShareView(data) {
   var mn=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
   var d = new Date(data.date+'T12:00:00');
   var dateStr = d.getDate()+' '+mn[d.getMonth()]+' '+d.getFullYear();
-
-  function lvC(l){return 'lv'+l}
-  function lvL(l){return l===1?'🔵 Нач.':l===2?'🟢 Ср.':'🟡 Топ'}
-  function bdg(l){return '<span class="lb '+lvC(l)+'">'+lvL(l)+'</span>'}
 
   var h = '';
   h += '<div style="max-width:700px;margin:0 auto;padding:24px 16px">';
